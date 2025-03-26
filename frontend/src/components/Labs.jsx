@@ -56,12 +56,12 @@ const Labs = () => {
 
   // Check if the user has any table action permissions
   const hasTableActionPermissions = () => {
-    return hasPermission('lab_update') || hasPermission('lab_delete');
+    return hasPermission('update') || hasPermission('delete');
   };
 
   // Handle create lab
   const handleCreate = async (labData) => {
-    if (!hasPermission('lab_create')) {
+    if (!hasPermission('add')) {
       alert('You do not have permission to create labs.');
       return;
     }
@@ -80,7 +80,7 @@ const Labs = () => {
 
   // Handle edit lab
   const handleEdit = async (labData) => {
-    if (!hasPermission('lab_update')) {
+    if (!hasPermission('update')) {
       alert('You do not have permission to edit labs.');
       return;
     }
@@ -103,7 +103,7 @@ const Labs = () => {
 
   // Handle delete lab
   const handleDelete = async () => {
-    if (!hasPermission('lab_delete')) {
+    if (!hasPermission('delete')) {
       alert('You do not have permission to delete labs.');
       return;
     }
@@ -139,7 +139,7 @@ const Labs = () => {
         {error && <div className="alert alert-danger">{error}</div>}
         
         {/* Show Create Lab button only if the user has permission */}
-        {hasPermission('lab_create') && (
+        {hasPermission('add') && (
           <button 
             className="btn btn-primary mb-3" 
             onClick={() => setShowCreateModal(true)}
@@ -161,6 +161,7 @@ const Labs = () => {
                 <th style={{ textAlign: 'center' }}>License Status</th>
                 <th style={{ textAlign: 'center' }}>Created At</th>
                 <th style={{ textAlign: 'center' }}>Updated At</th>
+                {/* Show Actions column only if the user has table action permissions */}
                 {hasTableActionPermissions() && <th style={{ textAlign: 'center' }}>Actions</th>}
               </tr>
             </thead>
@@ -181,9 +182,11 @@ const Labs = () => {
                     </td>
                     <td style={{ textAlign: 'center' }}>{formatDate(lab.created_at)}</td>
                     <td style={{ textAlign: 'center' }}>{formatDate(lab.updated_at)}</td>
+                    {/* Show Actions cell only if the user has table action permissions */}
                     {hasTableActionPermissions() && (
                       <td style={{ textAlign: 'center' }}>
-                        {hasPermission('lab_update') && (
+                        {/* Show Edit button only if the user has update permission */}
+                        {hasPermission('update') && (
                           <button
                             style={{ width: '58px', margin: '0 5px' }}
                             className="btn btn-warning btn-sm mb-1"
@@ -195,7 +198,8 @@ const Labs = () => {
                             Edit
                           </button>
                         )}
-                        {hasPermission('lab_delete') && (
+                        {/* Show Delete button only if the user has delete permission */}
+                        {hasPermission('delete') && (
                           <button
                             style={{ width: '58px', margin: '0 5px' }}
                             className="btn btn-danger btn-sm"

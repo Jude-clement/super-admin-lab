@@ -6,9 +6,9 @@ import Users from './Users';
 // import '../../plugins/datatables-bs4/css/dataTables.bootstrap4.min.css';
 // import '../../plugins/datatables-responsive/css/responsive.bootstrap4.min.css';
 import Dashboard from './Dashboard';
+import Labs from './Labs';
 import { useNavigate } from 'react-router-dom';
-import api from '../api'; // Import the Axios instance
-
+import api from '../api';
 
 const DataTable = () => {
   // Retrieve the active menu from localStorage or default to 'dashboard'
@@ -73,6 +73,15 @@ const DataTable = () => {
               Tables
             </a>
           </li>
+          <li className="nav-item d-none d-sm-inline-block">
+            <a
+              href="#"
+              className="nav-link"
+              onClick={() => handleMenuClick('labs')}
+            >
+              Labs
+            </a>
+          </li>
         </ul>
       </nav>
 
@@ -109,7 +118,16 @@ const DataTable = () => {
                   <p>Manage User</p>
                 </a>
               </li>
-
+              <li className="nav-item has-treeview">
+                <a
+                  href="#"
+                  className="nav-link"
+                  onClick={() => handleMenuClick('labs')}
+                >
+                  <i className="nav-icon fas fa-cog"></i>
+                  <p>Manage Labs</p>
+                </a>
+              </li>
               <li className="nav-item has-treeview">
                 <a
                   href="#"
@@ -130,7 +148,12 @@ const DataTable = () => {
           <div className="container-fluid">
             <div className="row mb-2">
               <div className="col-sm-6">
-                <h1>{activeMenu === 'dashboard' ? 'Dashboard' : 'Users'}</h1>
+                <h1>
+                  {activeMenu === 'dashboard' ? 'Dashboard' : 
+                   activeMenu === 'manage-user' ? 'Users' : 
+                   activeMenu === 'labs' ? 'Labs' : ''
+                   }
+                </h1>
               </div>
             </div>
           </div>
@@ -139,7 +162,10 @@ const DataTable = () => {
         <section className="content">
           <div className="row">
             <div className="col-12">
-              {activeMenu === 'dashboard' ? <Dashboard /> : <Users />}
+              {activeMenu === 'dashboard' ? <Dashboard /> : 
+               activeMenu === 'manage-user' ? <Users /> :
+               activeMenu === 'labs' ? <Labs /> : null
+               }
             </div>
           </div>
         </section>
