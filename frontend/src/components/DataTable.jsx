@@ -1,33 +1,49 @@
 import React, { useState, useEffect } from 'react';
-import { Link, Route, Routes } from 'react-router-dom';
 import Users from './Users';
-// import '../../public/assets/dist/css/adminlte.min.css';
-// import '../../plugins/fontawesome-free/css/all.min.css';
-// import '../../plugins/datatables-bs4/css/dataTables.bootstrap4.min.css';
-// import '../../plugins/datatables-responsive/css/responsive.bootstrap4.min.css';
 import Dashboard from './Dashboard';
 import Labs from './Labs';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
+import CreateLabModal from './CreateLabModal';
+import EditLabModal from './EditLabModal';
 
 const DataTable = () => {
-  // Retrieve the active menu from localStorage or default to 'dashboard'
   const [activeMenu, setActiveMenu] = useState(
     localStorage.getItem('activeMenu') || 'dashboard'
   );
-
+  const [selectedLab, setSelectedLab] = useState(null);
   const navigate = useNavigate();
+
+  const handleCreateLab = async (labData) => {
+    try {
+      // Your create lab API call would go here
+      // await api.post('/labs', labData);
+      setActiveMenu('labs'); // Return to labs view after creation
+    } catch (err) {
+      console.error('Failed to create lab', err);
+    }
+  };
+
+  const handleEditLab = async (labData) => {
+    try {
+      // Your edit lab API call would go here
+      // await api.put(`/labs/${selectedLab.lab_id}`, labData);
+      setActiveMenu('labs'); // Return to labs view after edit
+    } catch (err) {
+      console.error('Failed to edit lab', err);
+    }
+  };
 
   const handleLogout = async () => {
     try {
       await api.post('/logout');
-      localStorage.clear(); // Remove all stored items
-      navigate('/login'); // Redirect to login page
+      localStorage.clear();
+      navigate('/login');
     } catch (err) {
       console.error('Logout failed', err);
     }
   };
-  // Save the active menu to localStorage whenever it changes
+
   useEffect(() => {
     localStorage.setItem('activeMenu', activeMenu);
   }, [activeMenu]);
@@ -92,48 +108,27 @@ const DataTable = () => {
 
         <div className="sidebar">
           <nav className="mt-2">
-            <ul
-              className="nav nav-pills nav-sidebar flex-column"
-              data-widget="treeview"
-              role="menu"
-              data-accordion="false"
-            >
+            <ul className="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
               <li className="nav-item has-treeview">
-                <a
-                  href="#"
-                  className="nav-link"
-                  onClick={() => handleMenuClick('dashboard')}
-                >
+                <a href="#" className="nav-link" onClick={() => handleMenuClick('dashboard')}>
                   <i className="nav-icon fas fa-tachometer-alt"></i>
                   <p>Dashboard</p>
                 </a>
               </li>
               <li className="nav-item has-treeview">
-                <a
-                  href="#"
-                  className="nav-link"
-                  onClick={() => handleMenuClick('manage-user')}
-                >
+                <a href="#" className="nav-link" onClick={() => handleMenuClick('manage-user')}>
                   <i className="nav-icon fas fa-table"></i>
                   <p>Manage User</p>
                 </a>
               </li>
               <li className="nav-item has-treeview">
-                <a
-                  href="#"
-                  className="nav-link"
-                  onClick={() => handleMenuClick('labs')}
-                >
+                <a href="#" className="nav-link" onClick={() => handleMenuClick('labs')}>
                   <i className="nav-icon fas fa-cog"></i>
                   <p>Manage Labs</p>
                 </a>
               </li>
               <li className="nav-item has-treeview">
-                <a
-                  href="#"
-                  className="nav-link"
-                  onClick={handleLogout}
-                >
+                <a href="#" className="nav-link" onClick={handleLogout}>
                   <i className="nav-icon fas fa-sign-out-alt"></i>
                   <p>Logout</p>
                 </a>
@@ -151,8 +146,9 @@ const DataTable = () => {
                 <h1>
                   {activeMenu === 'dashboard' ? 'Dashboard' : 
                    activeMenu === 'manage-user' ? 'Users' : 
-                   activeMenu === 'labs' ? 'Labs' : ''
-                   }
+                   activeMenu === 'labs/create' ? 'Create New Lab' :
+                   activeMenu === 'labs/edit' ? 'Edit Lab' :
+                   activeMenu === 'labs' ? 'Labs' : ''}
                 </h1>
               </div>
             </div>
@@ -162,10 +158,27 @@ const DataTable = () => {
         <section className="content">
           <div className="row">
             <div className="col-12">
-              {activeMenu === 'dashboard' ? <Dashboard /> : 
-               activeMenu === 'manage-user' ? <Users /> :
-               activeMenu === 'labs' ? <Labs /> : null
-               }
+              {activeMenu === 'dashboard' && <Dashboard />}
+              {activeMenu === 'manage-user' && <Users />}
+              {activeMenu === 'labs' && (
+                <Labs 
+                  setActiveMenu={setActiveMenu}
+                  setSelectedLab={setSelectedLab}
+                />
+              )}
+              {activeMenu === 'labs/create' && (
+                <CreateLabModal 
+                  onSubmit={handleCreateLab}
+                  onCancel={() => setActiveMenu('labs')}
+                />
+              )}
+              {activeMenu === 'labs/edit' && selectedLab && (
+                <EditLabModal 
+                  lab={selectedLab}
+                  onSubmit={handleEditLab}
+                  onCancel={() => setActiveMenu('labs')}
+                />
+              )}
             </div>
           </div>
         </section>

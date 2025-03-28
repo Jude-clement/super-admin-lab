@@ -3,152 +3,107 @@
 namespace App\Http\Controllers\API;
 
 use App\Models\Lab;
-use App\Models\Setting;
+use App\Models\License;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 use App\Http\Controllers\Controller;
+use Carbon\Carbon;
 
 class LabController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
     public function index()
     {
-        $labs = Lab::with('settings')->get();
         return response()->json([
             'result' => true,
-            'data' => $labs
+            'data' => Lab::with(['licenses' => function($query) {
+                $query->orderBy('expiry_date', 'desc');
+            }])->get()
         ]);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        $validated = $request->validate([
             'lab_name' => 'required|string|max:255',
             'contact_person' => 'required|string|max:255',
-            'contact_email' => 'required|email|max:255',
-            'contact_phone' => 'required|string|max:20',
+            'contact_email' => 'required|email',
+            'contact_phone' => 'required|string',
             'address' => 'required|string',
-            'license_status' => 'required|string|in:active,expired,suspended',
-            'settings' => 'required|array',
-            'settings.name' => 'required|string|max:255',
-            'settings.phone' => 'required|string|max:20',
-            'settings.email' => 'required|email|max:255',
-            // Add other settings validation rules
+            'license_status' => 'sometimes|string|in:active,inactive,expired',
+            'license_key' => 'sometimes|nullable|string|unique:licenses,license_key',
+            'issued_date' => 'sometimes|nullable|date',
+            'expiry_date' => 'sometimes|nullable|date|after:issued_date'
         ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'result' => false,
-                'message' => 'Validation errors',
-                'errors' => $validator->errors()
-            ], 422);
+    
+        // Create the lab
+        $lab = Lab::create([
+            'lab_name' => $validated['lab_name'],
+            'contact_person' => $validated['contact_person'],
+            'contact_email' => $validated['contact_email'],
+            'contact_phone' => $validated['contact_phone'],
+            'address' => $validated['address'],
+            'license_status' => $validated['license_status'] ?? 'active'
+        ]);
+    
+        // Create license if included
+        if (isset($validated['license_key'])) {
+            $license = License::create([
+                'client_id' => $lab->lab_id,
+                'license_key' => $validated['license_key'],
+                'issued_date' => $validated['issued_date'],
+                'expiry_date' => $validated['expiry_date'],
+                'status' => 'active'
+            ]);
+            
+            // Update lab's license status based on the license
+            $lab->update(['license_status' => $license->status]);
         }
-
-        try {
-            // Create settings first
-            $settings = Setting::create($request->settings);
-
-            // Create lab with settings_id
-            $lab = Lab::create(array_merge(
-                $request->except('settings'),
-                ['settings_id' => $settings->settings_id]
-            ));
-
-            return response()->json([
-                'result' => true,
-                'data' => $lab->load('settings')
-            ], 201);
-        } catch (\Exception $e) {
-            return response()->json([
-                'result' => false,
-                'message' => 'Failed to create lab',
-                'error' => $e->getMessage()
-            ], 500);
-        }
+    
+        return response()->json([
+            'result' => true,
+            'data' => $lab->load('licenses'),
+            'message' => 'Lab created successfully'
+        ], 201);
     }
 
-    /**
-     * Display the specified resource.
-     */
     public function show(Lab $lab)
     {
         return response()->json([
             'result' => true,
-            'data' => $lab->load('settings')
+            'data' => $lab->load(['licenses' => function($query) {
+                $query->orderBy('expiry_date', 'desc');
+            }])
         ]);
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(Request $request, Lab $lab)
     {
-        $validator = Validator::make($request->all(), [
+        $validated = $request->validate([
             'lab_name' => 'sometimes|string|max:255',
             'contact_person' => 'sometimes|string|max:255',
-            'contact_email' => 'sometimes|email|max:255',
-            'contact_phone' => 'sometimes|string|max:20',
+            'contact_email' => 'sometimes|email',
+            'contact_phone' => 'sometimes|string',
             'address' => 'sometimes|string',
-            'license_status' => 'sometimes|string|in:active,expired,suspended',
-            'settings' => 'sometimes|array',
-            // Add other settings validation rules
+            'license_status' => 'sometimes|string|in:active,inactive,expired'
         ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'result' => false,
-                'message' => 'Validation errors',
-                'errors' => $validator->errors()
-            ], 422);
-        }
+        $lab->update($validated);
 
-        try {
-            // Update lab
-            $lab->update($request->except('settings'));
-
-            // Update settings if provided
-            if ($request->has('settings')) {
-                $lab->settings()->update($request->settings);
-            }
-
-            return response()->json([
-                'result' => true,
-                'data' => $lab->load('settings')
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'result' => false,
-                'message' => 'Failed to update lab',
-                'error' => $e->getMessage()
-            ], 500);
-        }
+        return response()->json([
+            'result' => true,
+            'data' => $lab,
+            'message' => 'Lab updated successfully'
+        ]);
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy(Lab $lab)
     {
-        try {
-            // Delete settings first to maintain referential integrity
-            $lab->settings()->delete();
-            $lab->delete();
-
-            return response()->json([
-                'result' => true,
-                'message' => 'Lab deleted successfully'
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'result' => false,
-                'message' => 'Failed to delete lab',
-                'error' => $e->getMessage()
-            ], 500);
-        }
+        // Delete associated licenses first
+        $lab->licenses()->delete();
+        $lab->delete();
+        
+        return response()->json([
+            'result' => true,
+            'message' => 'Lab and associated licenses deleted successfully'
+        ]);
     }
 }

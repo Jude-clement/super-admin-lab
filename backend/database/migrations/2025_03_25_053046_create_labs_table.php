@@ -18,8 +18,7 @@ return new class extends Migration
             $table->string('contact_email');
             $table->string('contact_phone');
             $table->text('address');
-            $table->enum('license_status', ['active', 'expired', 'pending'])->default('pending');
-            $table->foreignId('settings_id')->constrained('settings', 'settings_id')->onDelete('cascade');
+            $table->string('license_status')->default('inactive');
             $table->timestamps();
         });
     }
