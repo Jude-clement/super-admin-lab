@@ -14,9 +14,9 @@ return new class extends Migration
         Schema::create('licenses', function (Blueprint $table) {
             $table->id('license_id');
             $table->foreignId('client_id')->constrained('labs', 'lab_id')->onDelete('cascade');
-            $table->string('license_key')->unique();
-            $table->date('issued_date');
-            $table->date('expiry_date');
+            $table->string('license_key',255)->unique();
+            $table->dateTime('issued_date')->change();
+            $table->dateTime('expiry_date')->change();
             $table->enum('status', ['active', 'expired', 'revoked'])->default('active');
             $table->timestamps();
             

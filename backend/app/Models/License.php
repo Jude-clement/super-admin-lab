@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use App\Services\LicenseService;
+use Exception;
 
 class License extends Model
 {
@@ -18,13 +20,34 @@ class License extends Model
         'license_key',
         'issued_date',
         'expiry_date',
-        'status'
+        'status',
+        'features' // Added for JWT payload
     ];
 
     protected $casts = [
         'issued_date' => 'datetime:Y-m-d H:i:s',
         'expiry_date' => 'datetime:Y-m-d H:i:s',
+        'features' => 'array'
     ];
+
+    // Add these mutators to ensure proper formatting
+protected function issuedDate(): Attribute
+{
+    return Attribute::make(
+        set: fn ($value) => is_string($value) 
+            ? Carbon::createFromFormat('Y-m-d H:i:s', $value) 
+            : $value,
+    );
+}
+
+protected function expiryDate(): Attribute
+{
+    return Attribute::make(
+        set: fn ($value) => is_string($value) 
+            ? Carbon::createFromFormat('Y-m-d H:i:s', $value) 
+            : $value,
+    );
+}
 
     /**
      * The lab that owns this license.
@@ -55,23 +78,31 @@ class License extends Model
     }
 
     /**
-     * Check if license is valid (active and not expired)
+     * Check if license is valid (both in DB and JWT)
      */
     public function isValid(): bool
     {
-        return $this->status === 'active' && now()->lessThanOrEqualTo($this->expiry_date);
+        try {
+            $service = new LicenseService();
+            return $this->status === 'active' && 
+                   $service->validateToken($this->license_key) &&
+                   now()->lessThanOrEqualTo($this->expiry_date);
+        } catch (Exception $e) {
+            return false;
+        }
     }
 
     /**
-     * License key mutator for consistent formatting
+     * Get decoded token payload
      */
-    protected function licenseKey(): Attribute
+    public function getTokenData(): ?array
     {
-        return Attribute::make(
-            set: fn ($value) => strtoupper($value) // Preserve format
-        );
+        try {
+            return (new LicenseService())->getTokenData($this->license_key);
+        } catch (Exception $e) {
+            return null;
+        }
     }
-    
 
     /**
      * Automatically handle license status and sync with lab
@@ -86,20 +117,23 @@ class License extends Model
                 $license->status = 'expired';
             }
 
-            // Validate license key format
-            if (!preg_match('/^[A-Z0-9]{8}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{13}$/', $license->license_key)) {
-                throw new \InvalidArgumentException('Invalid license key format');
+            // Validate JWT token if present
+            if ($license->license_key) {
+                try {
+                    $service = new LicenseService();
+                    if (!$service->validateToken($license->license_key)) {
+                        throw new \InvalidArgumentException('Invalid license token');
+                    }
+                } catch (Exception $e) {
+                    throw new \InvalidArgumentException('License token validation failed: '.$e->getMessage());
+                }
             }
         });
 
         static::saved(function ($license) {
             // Sync with lab's license status
             if ($license->lab && $license->isDirty('status')) {
-                if ($license->isValid()) {
-                    $license->lab->update(['license_status' => 'active']);
-                } elseif ($license->status === 'expired') {
-                    $license->lab->update(['license_status' => 'expired']);
-                }
+                $license->lab->update(['license_status' => $license->status]);
             }
         });
 
@@ -109,5 +143,21 @@ class License extends Model
                 $license->lab->update(['license_status' => 'inactive']);
             }
         });
+    }
+
+    /**
+     * Generate a new JWT token for this license
+     */
+    public function generateNewToken(): string
+    {
+        $service = new LicenseService();
+        $this->license_key = $service->generateToken(
+            [
+                'lab_id' => $this->client_id,
+                'features' => $this->features ?? []
+            ],
+            $this->expiry_date
+        );
+        return $this->license_key;
     }
 }

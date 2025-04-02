@@ -14,6 +14,10 @@ class LicenseService
     public function __construct()
     {
         $this->secretKey = config('app.key');
+        
+        if (empty($this->secretKey)) {
+            throw new \RuntimeException('Application key not configured');
+        }
     }
 
     public function generateToken(array $payload, Carbon $expiryDate): string
@@ -21,10 +25,10 @@ class LicenseService
         $issuedAt = Carbon::now();
         
         $tokenPayload = [
-            'iss' => config('app.url'), // Issuer
-            'iat' => $issuedAt->timestamp, // Issued at
-            'exp' => $expiryDate->timestamp, // Expiration
-            'data' => $payload // Custom data
+            'iss' => config('app.url'),
+            'iat' => $issuedAt->timestamp,
+            'exp' => $expiryDate->timestamp,
+            'data' => $payload
         ];
 
         return JWT::encode($tokenPayload, $this->secretKey, $this->algorithm);
@@ -49,5 +53,27 @@ class LicenseService
             return null;
         }
     }
+
+    public function generateTokenForLab($labId, Carbon $issuedAt, Carbon $expiryDate): string
+    {
+        // Validate dates
+        if ($expiryDate <= $issuedAt) {
+            throw new \InvalidArgumentException('Expiry date must be after issued date');
+        }
+
+        return $this->generateToken([
+            'lab_id' => $labId,
+            'issued_at' => $issuedAt->toDateTimeString(),
+            'expires_at' => $expiryDate->toDateTimeString()
+        ], $expiryDate);
+    }
+
+    public function parseDateTimeString(string $dateTime): Carbon
+    {
+        try {
+            return Carbon::createFromFormat('Y-m-d H:i:s', $dateTime);
+        } catch (\Exception $e) {
+            throw new \InvalidArgumentException("Invalid datetime format. Expected Y-m-d H:i:s, got: {$dateTime}");
+        }
+    }
 }
-return \Firebase\JWT\JWT::encode($tokenPayload, $this->secretKey, $this->algorithm);

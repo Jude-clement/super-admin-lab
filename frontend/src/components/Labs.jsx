@@ -11,6 +11,7 @@ const Labs = ({ setActiveMenu, setSelectedLab }) => {
   const [error, setError] = useState('');
   const [permissions, setPermissions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentLabToDelete, setCurrentLabToDelete] = useState(null); // Added state for lab to delete
 
   // Fetch labs with their licenses from the backend
   const fetchLabs = async () => {
@@ -58,18 +59,19 @@ const Labs = ({ setActiveMenu, setSelectedLab }) => {
   // Handle delete lab (will cascade delete licenses)
   const handleDelete = async () => {
     if (!hasPermission('delete')) {
-      alert('You do not have permission to delete labs.');
+      setError('You do not have permission to delete labs.');
       return;
     }
     try {
-      const response = await api.delete(`/labs/${selectedLab.lab_id}`);
+      const response = await api.delete(`/labs/${currentLabToDelete.lab_id}`);
       if (response.data.result) {
         fetchLabs(); // Refresh the list
+        setShowDeleteModal(false);
       } else {
         throw new Error(response.data.message || 'Failed to delete lab.');
       }
     } catch (err) {
-      throw err;
+      setError(err.message || 'Failed to delete lab.');
     }
   };
 
@@ -137,7 +139,7 @@ const Labs = ({ setActiveMenu, setSelectedLab }) => {
                 <th style={{ textAlign: 'center' }}>License Status</th>
                 <th style={{ textAlign: 'center' }}>License Key</th>
                 <th style={{ textAlign: 'center' }}>Expiry Date</th>
-                <th style={{ textAlign: 'center' }}>Created At</th>
+                <th style={{ textAlign: 'center' }}>Issued Date</th>
                 {hasTableActionPermissions() && <th style={{ textAlign: 'center' }}>Actions</th>}
               </tr>
             </thead>
@@ -163,12 +165,18 @@ const Labs = ({ setActiveMenu, setSelectedLab }) => {
                         </span>
                       </td>
                       <td style={{ textAlign: 'center' }}>
-                        {lab.licenses?.[0]?.license_key || 'N/A'}
+                        {lab.licenses?.[0]?.license_key
+                          ? lab.licenses[0].license_key.length > 10
+                            ? lab.licenses[0].license_key.slice(0, 10) + '...'
+                            : lab.licenses[0].license_key
+                          : 'N/A'}
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         {lab.licenses?.[0]?.expiry_date ? formatDate(lab.licenses[0].expiry_date) : 'N/A'}
                       </td>
-                      <td style={{ textAlign: 'center' }}>{formatDate(lab.created_at)}</td>
+                      <td style={{ textAlign: 'center' }}>
+  {lab.licenses?.[0]?.issued_date ? formatDate(lab.licenses[0].issued_date) : 'N/A'}
+</td>
                       {hasTableActionPermissions() && (
                         <td style={{ textAlign: 'center' }}>
                           {hasPermission('update') && (
@@ -188,7 +196,7 @@ const Labs = ({ setActiveMenu, setSelectedLab }) => {
                               style={{ width: '58px', margin: '0 5px' }}
                               className="btn btn-danger btn-sm mb-1"
                               onClick={() => {
-                                setSelectedLab(lab);
+                                setCurrentLabToDelete(lab); // Set the lab to delete
                                 setShowDeleteModal(true);
                               }}
                             >
@@ -232,11 +240,11 @@ const Labs = ({ setActiveMenu, setSelectedLab }) => {
         </div>
       </div>
 
-      {/* Delete Lab Modal (only modal remaining) */}
+      {/* Delete Lab Modal */}
       {showDeleteModal && (
         <Suspense fallback={<div>Loading...</div>}>
           <DeleteLabModal
-            lab={selectedLab}
+            lab={currentLabToDelete}
             onClose={() => setShowDeleteModal(false)}
             onDelete={handleDelete}
           />
