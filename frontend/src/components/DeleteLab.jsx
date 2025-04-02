@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const DeleteLabModal = ({ lab, onClose, onDelete }) => {
+const DeleteLab = ({ lab, onClose, onDelete }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState('');
 
@@ -58,4 +58,4 @@ const DeleteLabModal = ({ lab, onClose, onDelete }) => {
   );
 };
 
-export default DeleteLabModal;
+export default DeleteLab;

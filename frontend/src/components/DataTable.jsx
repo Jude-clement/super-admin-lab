@@ -4,8 +4,8 @@ import Dashboard from './Dashboard';
 import Labs from './Labs';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
-import CreateLabModal from './CreateLabModal';
-import EditLabModal from './EditLabModal';
+import CreateLab from './CreateLab';
+import EditLab from './EditLab';
 
 const DataTable = () => {
   const [activeMenu, setActiveMenu] = useState(
@@ -167,13 +167,13 @@ const DataTable = () => {
                 />
               )}
               {activeMenu === 'labs/create' && (
-                <CreateLabModal 
+                <CreateLab 
                   onSubmit={handleCreateLab}
                   onCancel={() => setActiveMenu('labs')}
                 />
               )}
               {activeMenu === 'labs/edit' && selectedLab && (
-                <EditLabModal 
+                <EditLab 
                   lab={selectedLab}
                   onSubmit={handleEditLab}
                   onCancel={() => setActiveMenu('labs')}

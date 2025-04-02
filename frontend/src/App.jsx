@@ -8,7 +8,7 @@ import Users from './components/Users';
 import ProtectedRoute from './components/ProtectedRoute';
 import Labs from './components/Labs';
 import Licenses from './components/Licenses';
-import CreateLabModal from './components/CreateLabModal';
+import CreateLab from './components/CreateLab';
 
 const RouteTracker = () => {
   const location = useLocation();
@@ -44,7 +44,7 @@ function App() {
         <Route path="/manage-user" element={<ProtectedRoute><Users/></ProtectedRoute>} />
         <Route path="/labs" element={<ProtectedRoute><Labs/></ProtectedRoute>} />
         <Route path="licenses" element={<ProtectedRoute><Licenses/></ProtectedRoute>} />
-        <Route path="/labs/create" element={<ProtectedRoute><CreateLabModal/></ProtectedRoute>} />
+        <Route path="/labs/create" element={<ProtectedRoute><CreateLab/></ProtectedRoute>} />
       </Routes>
     </Router>
 </AuthProvider>

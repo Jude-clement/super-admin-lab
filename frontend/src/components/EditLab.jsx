@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
 
-const EditLabModal = ({ lab, onCancel, onSubmit }) => {
+const EditLab = ({ lab, onCancel, onSubmit }) => {
   const [formData, setFormData] = useState({
     lab_name: '',
     contact_person: '',
@@ -393,4 +393,4 @@ const EditLabModal = ({ lab, onCancel, onSubmit }) => {
   );
 };
 
-export default EditLabModal;
+export default EditLab;

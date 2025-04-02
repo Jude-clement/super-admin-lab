@@ -3,7 +3,7 @@ import api from '../api';
 import { generateLicenseKey } from '../utils/licenseGenerator';
 
 // Lazy load only the delete modal component
-const DeleteLabModal = React.lazy(() => import('./DeleteLabModal '));
+const DeleteLabModal = React.lazy(() => import('./DeleteLab'));
 
 const Labs = ({ setActiveMenu, setSelectedLab }) => {
   const [labs, setLabs] = useState([]);
