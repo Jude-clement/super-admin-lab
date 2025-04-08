@@ -1,7 +1,14 @@
 import React, { useState } from 'react';
 import api from '../api';
+import { format, parse } from 'date-fns';
 
 const CreateLab = ({ onCancel, onSubmit }) => {
+  // Status constants
+  const LICENSE_STATUS = {
+    DEACTIVATED: 0,
+    ACTIVE: 1
+  };
+
   const [formData, setFormData] = useState({
     // Lab Info
     lab_name: '',
@@ -9,7 +16,7 @@ const CreateLab = ({ onCancel, onSubmit }) => {
     contact_email: '',
     contact_phone: '',
     address: '',
-    license_status: 'active',
+    // license_status: 'active', // Maintain string status for lab
     includeLicense: true,
     
     // License Info
@@ -100,17 +107,31 @@ const CreateLab = ({ onCancel, onSubmit }) => {
     try {
       // Create license if needed
       if (formData.includeLicense && formData.license_token) {
+        // Format dates consistently
+        const issuedDateTime = parse(
+          `${formData.issued_date} ${formData.issued_time}`,
+          'yyyy-MM-dd HH:mm',
+          new Date()
+        ).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+        
+        const expiryDateTime = parse(
+          `${formData.expiry_date} ${formData.expiry_time}`,
+          'yyyy-MM-dd HH:mm',
+          new Date()
+        ).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+  
         await api.post('/licenses', {
           client_id: formData.created_lab_id,
           license_key: formData.license_token,
-          issued_date: `${formData.issued_date} ${formData.issued_time}:00`,
-          expiry_date: `${formData.expiry_date} ${formData.expiry_time}:00`,
-          status: 'active'
+          issued_date: format(issuedDateTime, 'yyyy-MM-dd HH:mm:ss'),
+          expiry_date: format(expiryDateTime, 'yyyy-MM-dd HH:mm:ss')
+          // Let backend calculate status
         });
       }
-
+    
       onSubmit({ lab_id: formData.created_lab_id });
-    } catch (err) {
+    }
+    catch (err) {
       setErrors({
         general: err.response?.data?.message || 'Failed to create license'
       });
@@ -215,7 +236,7 @@ const CreateLab = ({ onCancel, onSubmit }) => {
                     )}
                   </div>
                   
-                  <div className="form-group">
+                  {/* <div className="form-group">
                     <label>License Status *</label>
                     <select
                       name="license_status"
@@ -230,7 +251,7 @@ const CreateLab = ({ onCancel, onSubmit }) => {
                     {errors.license_status && (
                       <div className="invalid-feedback">{errors.license_status}</div>
                     )}
-                  </div>
+                  </div> */}
                 </div>
 
                 <div className="col-12">
@@ -309,7 +330,7 @@ const CreateLab = ({ onCancel, onSubmit }) => {
                     </div>
                   </div>
                 </div>
-
+                 
                 {formData.includeLicense && (
                   <div className="form-group">
                     <label>License Token *</label>
@@ -337,9 +358,12 @@ const CreateLab = ({ onCancel, onSubmit }) => {
                     {errors.license_token && (
                       <div className="invalid-feedback">{errors.license_token}</div>
                     )}
-                    <small className="form-text text-muted">
+                    {/* <small className="form-text text-muted">
                       Token will be valid from {formData.issued_date} {formData.issued_time} to {formData.expiry_date} {formData.expiry_time}
-                    </small>
+                    </small> */}
+                    <small className="form-text text-muted">
+  Times are in IST (Asia/Kolkata). Valid from {formData.issued_date} {formData.issued_time} to {formData.expiry_date} {formData.expiry_time}
+</small>
                   </div>
                 )}
               </div>

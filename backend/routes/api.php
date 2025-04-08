@@ -22,6 +22,10 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/refresh', [AuthController::class, 'refresh']);
 Route::post('/licenses/validate', [LicenseController::class, 'validateToken']); // Public token validation
+Route::get('/licenses/{id}/check-status', [LicenseController::class, 'checkLicenseStatus']);
+
+// Add to routes/api.php:
+// Route::post('/licenses/{license}/sync-status', [LicenseController::class, 'syncStatus']);
 
 // Protected routes (require authentication)
 Route::middleware(['auth:sanctum'])->group(function () {

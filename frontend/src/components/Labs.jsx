@@ -1,6 +1,5 @@
 import React, { useEffect, useState, Suspense } from 'react';
 import api from '../api';
-import { generateLicenseKey } from '../utils/licenseGenerator';
 
 // Lazy load only the delete modal component
 const DeleteLabModal = React.lazy(() => import('./DeleteLab'));
@@ -11,7 +10,13 @@ const Labs = ({ setActiveMenu, setSelectedLab }) => {
   const [error, setError] = useState('');
   const [permissions, setPermissions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [currentLabToDelete, setCurrentLabToDelete] = useState(null); // Added state for lab to delete
+  const [currentLabToDelete, setCurrentLabToDelete] = useState(null);
+
+  // Status constants
+  const LICENSE_STATUS = {
+    DEACTIVATED: 0,
+    ACTIVE: 1
+  };
 
   // Fetch labs with their licenses from the backend
   const fetchLabs = async () => {
@@ -103,12 +108,50 @@ const Labs = ({ setActiveMenu, setSelectedLab }) => {
     }
   };
 
-  // Format date to a readable string
+  // Format date to a readable string with IST timezone
   const formatDate = (dateString) => {
     if (!dateString) return '-';
-    const date = new Date(dateString);
-    return date.toLocaleString();
+    return new Date(dateString).toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
   };
+
+  // Check if license is currently active based on dates
+  const isLicenseCurrentlyActive = (license) => {
+    if (!license) return false;
+    const now = new Date();
+    const issued = new Date(license.issued_date);
+    const expiry = new Date(license.expiry_date);
+    return now >= issued && now <= expiry;
+  };
+
+  // Get comprehensive status display info for a lab
+  const getLabStatusDisplay = (lab) => {
+    const license = lab.licenses?.[0];
+    if (!license) return {
+      text: 'No License',
+      badgeClass: 'bg-secondary',
+      tooltip: 'This lab has no associated license'
+    };
+
+    // const isActive = license.status === LICENSE_STATUS.ACTIVE;
+    // const isValidPeriod = isLicenseCurrentlyActive(license);
+    // const isActuallyActive = isActive && isValidPeriod;
+    
+  return {
+    text: license.status === LICENSE_STATUS.ACTIVE ? 'Active' : 'Inactive',
+    badgeClass: license.status === LICENSE_STATUS.ACTIVE ? 'bg-success' : 'bg-warning',
+    tooltip: `Status: ${license.status === LICENSE_STATUS.ACTIVE ? 'ACTIVE' : 'INACTIVE'}\n` +
+           `Issued: ${formatDate(license.issued_date)}\n` +
+           `Expires: ${formatDate(license.expiry_date)}`
+  };
+};
 
   if (loading) {
     return <div className="text-center py-4">Loading labs...</div>;
@@ -137,17 +180,19 @@ const Labs = ({ setActiveMenu, setSelectedLab }) => {
                 <th style={{ textAlign: 'center' }}>Contact Info</th>
                 <th style={{ textAlign: 'center' }}>Address</th>
                 <th style={{ textAlign: 'center' }}>License Status</th>
-                <th style={{ textAlign: 'center' }}>License Key</th>
-                <th style={{ textAlign: 'center' }}>Expiry Date</th>
+                <th style={{ textAlign: 'center' }}>License Token</th>
                 <th style={{ textAlign: 'center' }}>Issued Date</th>
+                <th style={{ textAlign: 'center' }}>Expiry Date</th>
                 {hasTableActionPermissions() && <th style={{ textAlign: 'center' }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {labs.length > 0 ? (
-                labs.map((lab) => (
-                  <React.Fragment key={lab.lab_id}>
-                    <tr>
+                labs.map((lab) => {
+                  const status = getLabStatusDisplay(lab);
+                  const license = lab.licenses?.[0];
+                  return (
+                    <tr key={lab.lab_id}>
                       <td style={{ textAlign: 'center' }}>{lab.lab_id}</td>
                       <td style={{ textAlign: 'center' }}>{lab.lab_name}</td>
                       <td style={{ textAlign: 'center' }}>
@@ -157,26 +202,36 @@ const Labs = ({ setActiveMenu, setSelectedLab }) => {
                       </td>
                       <td style={{ textAlign: 'center' }}>{lab.address}</td>
                       <td style={{ textAlign: 'center' }}>
-                        <span className={`badge ${
-                          lab.license_status === 'active' ? 'bg-success' : 
-                          lab.license_status === 'expired' ? 'bg-danger' : 'bg-warning'
-                        }`}>
-                          {lab.license_status}
+                        <span 
+                          className={`badge ${status.badgeClass}`}
+                          title={status.tooltip}
+                          style={{ cursor: 'help' }}
+                        >
+                          {status.text}
                         </span>
+                        {/* {license && (
+                          <button 
+                            className="btn btn-link btn-sm"
+                            onClick={() => syncLicenseStatus(license.license_id)}
+                            title="Sync with current time"
+                          >
+                            <i className="fas fa-sync-alt"></i>
+                          </button>
+                        )} */}
                       </td>
                       <td style={{ textAlign: 'center' }}>
-                        {lab.licenses?.[0]?.license_key
-                          ? lab.licenses[0].license_key.length > 10
-                            ? lab.licenses[0].license_key.slice(0, 10) + '...'
-                            : lab.licenses[0].license_key
+                        {license?.license_key
+                          ? license.license_key.length > 10
+                            ? license.license_key.slice(0, 10) + '...'
+                            : license.license_key
                           : 'N/A'}
                       </td>
                       <td style={{ textAlign: 'center' }}>
-                        {lab.licenses?.[0]?.expiry_date ? formatDate(lab.licenses[0].expiry_date) : 'N/A'}
+                        {license?.issued_date ? formatDate(license.issued_date) : 'N/A'}
                       </td>
                       <td style={{ textAlign: 'center' }}>
-  {lab.licenses?.[0]?.issued_date ? formatDate(lab.licenses[0].issued_date) : 'N/A'}
-</td>
+                        {license?.expiry_date ? formatDate(license.expiry_date) : 'N/A'}
+                      </td>
                       {hasTableActionPermissions() && (
                         <td style={{ textAlign: 'center' }}>
                           {hasPermission('update') && (
@@ -196,38 +251,18 @@ const Labs = ({ setActiveMenu, setSelectedLab }) => {
                               style={{ width: '58px', margin: '0 5px' }}
                               className="btn btn-danger btn-sm mb-1"
                               onClick={() => {
-                                setCurrentLabToDelete(lab); // Set the lab to delete
+                                setCurrentLabToDelete(lab);
                                 setShowDeleteModal(true);
                               }}
                             >
                               Delete
                             </button>
                           )}
-                          {hasPermission('update') && lab.licenses?.[0] && (
-                            lab.licenses[0].status === 'active' ? (
-                              <button
-                                style={{ width: '90px', margin: '0 5px' }}
-                                className="btn btn-secondary btn-sm"
-                                onClick={() => handleDeactivateLicense(lab.licenses[0].license_id)}
-                              >
-                                Deactivate
-                              </button>
-                            ) : (
-                              <button
-                                style={{ width: '90px', margin: '0 5px' }}
-                                className="btn btn-success btn-sm"
-                                onClick={() => handleActivateLicense(lab.licenses[0].license_id)}
-                                disabled={lab.licenses[0].status === 'expired'}
-                              >
-                                Activate
-                              </button>
-                            )
-                          )}
                         </td>
                       )}
                     </tr>
-                  </React.Fragment>
-                ))
+                  );
+                })
               ) : (
                 <tr>
                   <td colSpan={hasTableActionPermissions() ? 9 : 8} className="text-center">

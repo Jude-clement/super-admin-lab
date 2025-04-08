@@ -8,10 +8,14 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use App\Services\LicenseService;
 use Exception;
+use Illuminate\Support\Facades\Log;
 
 class License extends Model
 {
     use HasFactory;
+
+    const DEACTIVATED = 0;
+    const ACTIVE = 1;
 
     protected $primaryKey = 'license_id';
 
@@ -21,80 +25,78 @@ class License extends Model
         'issued_date',
         'expiry_date',
         'status',
-        'features' // Added for JWT payload
+        'features'
     ];
 
     protected $casts = [
         'issued_date' => 'datetime:Y-m-d H:i:s',
         'expiry_date' => 'datetime:Y-m-d H:i:s',
+        'status' => 'integer',
         'features' => 'array'
     ];
 
-    // Add these mutators to ensure proper formatting
-protected function issuedDate(): Attribute
-{
-    return Attribute::make(
-        set: fn ($value) => is_string($value) 
-            ? Carbon::createFromFormat('Y-m-d H:i:s', $value) 
-            : $value,
-    );
-}
+    protected $appends = ['real_time_status'];
 
-protected function expiryDate(): Attribute
-{
-    return Attribute::make(
-        set: fn ($value) => is_string($value) 
-            ? Carbon::createFromFormat('Y-m-d H:i:s', $value) 
-            : $value,
-    );
-}
+    protected function issuedDate(): Attribute
+    {
+        return Attribute::make(
+            set: fn ($value) => is_string($value) 
+                ? Carbon::createFromFormat('Y-m-d H:i:s', $value, 'Asia/Kolkata')
+                : $value->timezone('Asia/Kolkata'),
+        );
+    }
 
-    /**
-     * The lab that owns this license.
-     */
+    protected function expiryDate(): Attribute
+    {
+        return Attribute::make(
+            set: fn ($value) => is_string($value) 
+                ? Carbon::createFromFormat('Y-m-d H:i:s', $value, 'Asia/Kolkata')
+                : $value->timezone('Asia/Kolkata'),
+        );
+    }
+
     public function lab()
     {
         return $this->belongsTo(Lab::class, 'client_id', 'lab_id');
     }
 
-    /**
-     * Scope for active licenses
-     */
     public function scopeActive($query)
     {
-        return $query->where('status', 'active')
-                    ->where('expiry_date', '>', now());
+        return $query->where('status', self::ACTIVE);
     }
 
-    /**
-     * Scope for expired licenses
-     */
-    public function scopeExpired($query)
+    public function scopeDeactivated($query)
     {
-        return $query->where(function($q) {
-            $q->where('status', 'expired')
-              ->orWhere('expiry_date', '<', now());
-        });
+        return $query->where('status', self::DEACTIVATED)
+                    ->orWhere('issued_date', '>', now('Asia/Kolkata'))
+                    ->orWhere('expiry_date', '<', now('Asia/Kolkata'));
     }
 
-    /**
-     * Check if license is valid (both in DB and JWT)
-     */
+    public function scopeInactive($query)
+    {
+        return $query->where('status', self::DEACTIVATED);
+    }
+
+    public function getRealTimeStatusAttribute()
+    {
+        $now = now('Asia/Kolkata');
+        $issued = Carbon::parse($this->issued_date)->timezone('Asia/Kolkata');
+        $expiry = Carbon::parse($this->expiry_date)->timezone('Asia/Kolkata');
+        
+        return $now->between($issued, $expiry) ? self::ACTIVE : self::DEACTIVATED;
+    }
+
     public function isValid(): bool
     {
         try {
             $service = new LicenseService();
-            return $this->status === 'active' && 
-                   $service->validateToken($this->license_key) &&
-                   now()->lessThanOrEqualTo($this->expiry_date);
+            return $this->real_time_status === self::ACTIVE && 
+                   $service->validateToken($this->license_key);
         } catch (Exception $e) {
             return false;
         }
     }
 
-    /**
-     * Get decoded token payload
-     */
     public function getTokenData(): ?array
     {
         try {
@@ -104,50 +106,33 @@ protected function expiryDate(): Attribute
         }
     }
 
-    /**
-     * Automatically handle license status and sync with lab
-     */
-    protected static function boot()
-    {
-        parent::boot();
+// Replace the boot method with this:
+protected static function boot()
+{
+    parent::boot();
 
-        static::saving(function ($license) {
-            // Auto-expire if past expiry date
-            if (now()->greaterThan($license->expiry_date)) {
-                $license->status = 'expired';
-            }
+    static::saving(function ($license) {
+        $timezone = 'Asia/Kolkata';
+        $now = Carbon::now($timezone);
+        $issued = Carbon::parse($license->issued_date)->timezone($timezone);
+        $expiry = Carbon::parse($license->expiry_date)->timezone($timezone);
+        
+        // Force status update based on current time
+        $license->status = $now->between($issued, $expiry) 
+            ? self::ACTIVE 
+            : self::DEACTIVATED;
+    });
 
-            // Validate JWT token if present
-            if ($license->license_key) {
-                try {
-                    $service = new LicenseService();
-                    if (!$service->validateToken($license->license_key)) {
-                        throw new \InvalidArgumentException('Invalid license token');
-                    }
-                } catch (Exception $e) {
-                    throw new \InvalidArgumentException('License token validation failed: '.$e->getMessage());
-                }
-            }
-        });
+    static::updated(function ($license) {
+        if ($license->lab && $license->isDirty('status')) {
+            $license->lab->update([
+                'license_status' => $license->status ? 'active' : 'inactive',
+                'numeric_status' => $license->status
+            ]);
+        }
+    });
+}
 
-        static::saved(function ($license) {
-            // Sync with lab's license status
-            if ($license->lab && $license->isDirty('status')) {
-                $license->lab->update(['license_status' => $license->status]);
-            }
-        });
-
-        static::deleted(function ($license) {
-            // Update lab status if this was the last license
-            if ($license->lab && $license->lab->licenses()->count() === 0) {
-                $license->lab->update(['license_status' => 'inactive']);
-            }
-        });
-    }
-
-    /**
-     * Generate a new JWT token for this license
-     */
     public function generateNewToken(): string
     {
         $service = new LicenseService();
@@ -160,4 +145,40 @@ protected function expiryDate(): Attribute
         );
         return $this->license_key;
     }
+
+// In App\Models\License
+public function refreshStatus()
+{
+    try {
+        $timezone = 'Asia/Kolkata';
+        $now = Carbon::now($timezone);
+        $issued = Carbon::parse($this->issued_date)->timezone($timezone);
+        $expiry = Carbon::parse($this->expiry_date)->timezone($timezone);
+        
+        $newStatus = $now->between($issued, $expiry) 
+            ? self::ACTIVE 
+            : self::DEACTIVATED;
+        
+        if ($this->status !== $newStatus) {
+            Log::info("Updating license status", [
+                'license_id' => $this->license_id,
+                'old_status' => $this->status,
+                'new_status' => $newStatus,
+                'issued' => $issued,
+                'expiry' => $expiry,
+                'now' => $now
+            ]);
+            $this->status = $newStatus;
+            $this->save();
+        }
+        
+        return $this;
+    } catch (\Exception $e) {
+        Log::error("Status refresh failed", [
+            'license_id' => $this->license_id,
+            'error' => $e->getMessage()
+        ]);
+        throw $e;
+    }
+}
 }

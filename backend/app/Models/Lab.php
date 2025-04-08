@@ -18,7 +18,8 @@ class Lab extends Model
         'contact_email',
         'contact_phone',
         'address',
-        'license_status'
+        'numeric_status', // Add this to allow mass assignment
+        'license_status' // Maintains string status for backward compatibility
     ];
 
     protected $casts = [
@@ -36,13 +37,14 @@ class Lab extends Model
     }
 
     /**
-     * Get the current active license
+     * Get the current active license (within valid date range)
      */
     public function activeLicense()
     {
         return $this->hasOne(License::class, 'client_id', 'lab_id')
-                   ->where('status', 'active')
-                   ->where('expiry_date', '>', now())
+                   ->where('status', License::ACTIVE)
+                   ->where('issued_date', '<=', now())
+                   ->where('expiry_date', '>=', now())
                    ->latest('expiry_date');
     }
 
@@ -65,12 +67,15 @@ class Lab extends Model
 
     /**
      * Get license status with proper typing
+     * Maintains string status for backward compatibility
      */
     protected function licenseStatus(): Attribute
     {
         return Attribute::make(
             get: fn ($value) => $value ?? 'inactive',
-            set: fn ($value) => strtolower($value)
+            set: fn ($value) => is_numeric($value) 
+                ? ($value ? 'active' : 'inactive')
+                : strtolower($value)
         );
     }
 
@@ -82,15 +87,30 @@ class Lab extends Model
         parent::boot();
 
         static::saving(function ($lab) {
-            if ($lab->isDirty('license_status')) {
-                // If manually changing status, update all licenses
-                $lab->licenses()->update(['status' => $lab->license_status]);
-            }
+        // Always sync numeric_status with license_status
+        $lab->numeric_status = $lab->license_status === 'active' 
+            ? License::ACTIVE 
+            : License::DEACTIVATED;
         });
 
         static::deleting(function ($lab) {
             // Delete all associated licenses when lab is deleted
             $lab->licenses()->delete();
         });
+    }
+
+    /**
+     * Helper method to get the current license status based on dates
+     */
+    public function refreshLicenseStatus(): void
+    {
+        $hasActive = $this->licenses()
+            ->where('issued_date', '<=', now())
+            ->where('expiry_date', '>=', now())
+            ->where('status', License::ACTIVE)
+            ->exists();
+
+        $this->license_status = $hasActive ? 'active' : 'inactive';
+        $this->save();
     }
 }

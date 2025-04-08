@@ -2,13 +2,19 @@ import React, { useState, useEffect } from 'react';
 import api from '../api';
 
 const EditLab = ({ lab, onCancel, onSubmit }) => {
+  // Status constants
+  const LICENSE_STATUS = {
+    DEACTIVATED: 0,
+    ACTIVE: 1
+  };
+
   const [formData, setFormData] = useState({
     lab_name: '',
     contact_person: '',
     contact_email: '',
     contact_phone: '',
     address: '',
-    license_status: 'active',
+    // license_status: 'active', // Maintain string status for lab
     license_key: '',
     issued_date: '',
     issued_time: '12:00',
@@ -90,13 +96,19 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
       const backendIssuedDate = formatBackendDate(formData.issued_date);
       const backendExpiryDate = formatBackendDate(formData.expiry_date);
       
-      const issuedAt = new Date(`${backendIssuedDate}T${formData.issued_time}`);
-      const expiresAt = new Date(`${backendExpiryDate}T${formData.expiry_time}`);
+      // Create properly formatted datetime strings
+      const issuedAt = `${backendIssuedDate} ${formData.issued_time}:00`;
+      const expiresAt = `${backendExpiryDate} ${formData.expiry_time}:00`;
       
+          // Validate dates
+    if (new Date(expiresAt) <= new Date(issuedAt)) {
+      throw new Error('Expiry time must be after issued time');
+    }
+    
       const tokenResponse = await api.post('/licenses/generate-token', {
         lab_id: lab.lab_id,
-        issued_at: issuedAt.toISOString(),
-        expires_at: expiresAt.toISOString()
+        issued_at: issuedAt,
+        expires_at: expiresAt
       });
 
       setFormData(prev => ({
@@ -118,17 +130,16 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
     setErrors({});
     
     try {
-      // Update lab details
+      // Update lab details - remove license_status since it's auto-managed
       const labResponse = await api.put(`/labs/${lab.lab_id}`, {
         lab_name: formData.lab_name,
         contact_person: formData.contact_person,
         contact_email: formData.contact_email,
         contact_phone: formData.contact_phone,
-        address: formData.address,
-        license_status: formData.license_status
+        address: formData.address
       });
-
-      // Update license if exists
+    
+      // Update license if exists - remove manual status setting
       if (showTokenSection && lab.licenses?.[0]) {
         const backendIssuedDate = formatBackendDate(formData.issued_date);
         const backendExpiryDate = formatBackendDate(formData.expiry_date);
@@ -136,13 +147,14 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
         await api.put(`/licenses/${lab.licenses[0].license_id}`, {
           license_key: formData.license_key,
           issued_date: `${backendIssuedDate} ${formData.issued_time}:00`,
-          expiry_date: `${backendExpiryDate} ${formData.expiry_time}:00`,
-          status: formData.license_status
+          expiry_date: `${backendExpiryDate} ${formData.expiry_time}:00`
+          // Status will be auto-updated by scheduler
         });
       }
-
+    
       onSubmit(labResponse.data.data);
-    } catch (err) {
+    } 
+    catch (err) {
       if (err.response?.data?.errors) {
         setErrors(err.response.data.errors);
       } else {
@@ -247,7 +259,7 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
                   )}
                 </div>
                 
-                <div className="form-group">
+                {/* <div className="form-group">
                   <label>License Status *</label>
                   <select
                     name="license_status"
@@ -258,12 +270,11 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
                   >
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
-                    <option value="expired">Expired</option>
                   </select>
                   {errors.license_status && (
                     <div className="invalid-feedback">{errors.license_status}</div>
                   )}
-                </div>
+                </div> */}
               </div>
             </div>
 

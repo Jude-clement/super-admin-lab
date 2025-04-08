@@ -70,8 +70,8 @@ return [
     |
     */
 
-    'timezone' => 'UTC',
-
+// 'timezone' => env('APP_TIMEZONE', 'UTC'),
+'timezone' => 'Asia/Kolkata', // Change from Europe/Berlin
     /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration
