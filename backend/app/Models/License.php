@@ -147,6 +147,7 @@ protected static function boot()
     }
 
 // In App\Models\License
+// In App\Models\License
 public function refreshStatus()
 {
     try {
@@ -155,28 +156,48 @@ public function refreshStatus()
         $issued = Carbon::parse($this->issued_date)->timezone($timezone);
         $expiry = Carbon::parse($this->expiry_date)->timezone($timezone);
         
+        $oldStatus = $this->status;
         $newStatus = $now->between($issued, $expiry) 
             ? self::ACTIVE 
             : self::DEACTIVATED;
         
-        if ($this->status !== $newStatus) {
-            Log::info("Updating license status", [
+        if ($oldStatus !== $newStatus) {
+            // Add more descriptive logging
+            $statusChangeType = $oldStatus == self::DEACTIVATED && $newStatus == self::ACTIVE 
+                ? 'activation' 
+                : 'deactivation';
+                
+            Log::channel('license')->info("License {$statusChangeType}", [
                 'license_id' => $this->license_id,
-                'old_status' => $this->status,
+                'client_id' => $this->client_id,
+                'old_status' => $oldStatus,
                 'new_status' => $newStatus,
-                'issued' => $issued,
-                'expiry' => $expiry,
-                'now' => $now
+                'issued_date' => $issued->format('Y-m-d H:i:s'),
+                'expiry_date' => $expiry->format('Y-m-d H:i:s'),
+                'current_time' => $now->format('Y-m-d H:i:s'),
+                'timezone' => $timezone,
+                'action' => "status_{$statusChangeType}",
+                'model' => 'License'
             ]);
+            
             $this->status = $newStatus;
             $this->save();
+            
+            // Update lab status if necessary
+            if ($this->lab) {
+                $this->lab->update([
+                    'license_status' => $newStatus ? 'active' : 'inactive',
+                    'numeric_status' => $newStatus
+                ]);
+            }
         }
         
         return $this;
     } catch (\Exception $e) {
-        Log::error("Status refresh failed", [
-            'license_id' => $this->license_id,
-            'error' => $e->getMessage()
+        Log::channel('license')->error('License status refresh failed', [
+            'license_id' => $this->license_id ?? null,
+            'error' => $e->getMessage(),
+            'stack_trace' => $e->getTraceAsString()
         ]);
         throw $e;
     }

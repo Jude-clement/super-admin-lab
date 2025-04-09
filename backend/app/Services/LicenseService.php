@@ -7,6 +7,7 @@ use Firebase\JWT\Key;
 use Carbon\Carbon;
 use App\Models\License;
 use App\Models\Lab;
+use Illuminate\Support\Facades\Log;
 
 class LicenseService
 {
@@ -101,6 +102,9 @@ class LicenseService
             }
 
             $now = Carbon::now('Asia/Kolkata');
+            Log::info("Current date and time: " . $now->format('Y-m-d H:i:s'));
+            Log::info("Token issue date: " . $data['issued_at']);
+            Log::info("Token expiration date: " . $data['expires_at']);
             $isActive = $now->between(
                 Carbon::parse($data['issued_at'])->setTimezone('Asia/Kolkata'),
                 Carbon::parse($data['expires_at'])->setTimezone('Asia/Kolkata')
