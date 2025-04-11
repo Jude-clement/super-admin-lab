@@ -1,40 +1,53 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Users from './Users';
 import Dashboard from './Dashboard';
 import Labs from './Labs';
-import { useNavigate } from 'react-router-dom';
-import api from '../api';
 import CreateLab from './CreateLab';
 import EditLab from './EditLab';
+import api from '../api';
+import Tickets from './Tickets';
+import CreateTicket from './CreateTicket';
+import EditTicket from './EditTicket';
+
+const menuComponents = {
+  dashboard: Dashboard,
+  'manage-user': Users,
+  labs: Labs,
+  'labs/create': CreateLab,
+  'labs/edit': EditLab,
+  tickets: Tickets,
+  'tickets/create': CreateTicket,
+  'tickets/edit': EditTicket,
+};
+
+const menuTitles = {
+  dashboard: 'Dashboard',
+  'manage-user': 'Users',
+  'labs/create': 'Create New Lab',
+  'labs/edit': 'Edit Lab',
+  labs: 'Labs',
+  tickets: 'Tickets',
+};
 
 const DataTable = () => {
   const [activeMenu, setActiveMenu] = useState(
     localStorage.getItem('activeMenu') || 'dashboard'
   );
   const [selectedLab, setSelectedLab] = useState(null);
+  const [selectedTicket, setSelectedTicket] = useState(null);
+
   const navigate = useNavigate();
 
-  const handleCreateLab = async (labData) => {
+  const handleLabAction = useCallback(async (action, labData) => {
     try {
-      // Your create lab API call would go here
-      // await api.post('/labs', labData);
-      setActiveMenu('labs'); // Return to labs view after creation
+      setActiveMenu('labs');
     } catch (err) {
-      console.error('Failed to create lab', err);
+      console.error(`${action} lab failed`, err);
     }
-  };
+  }, [selectedLab]);
 
-  const handleEditLab = async (labData) => {
-    try {
-      // Your edit lab API call would go here
-      // await api.put(`/labs/${selectedLab.lab_id}`, labData);
-      setActiveMenu('labs'); // Return to labs view after edit
-    } catch (err) {
-      console.error('Failed to edit lab', err);
-    }
-  };
-
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     try {
       await api.post('/logout');
       localStorage.clear();
@@ -42,62 +55,68 @@ const DataTable = () => {
     } catch (err) {
       console.error('Logout failed', err);
     }
-  };
+  }, [navigate]);
 
   useEffect(() => {
     localStorage.setItem('activeMenu', activeMenu);
   }, [activeMenu]);
 
-  const toggleSidebar = () => {
+  const toggleSidebar = useCallback(() => {
     document.body.classList.toggle('sidebar-collapse');
+  }, []);
+
+  const handleMenuClick = useCallback((menu) => {
+    setActiveMenu(menu);
+  }, []);
+
+  const renderActiveComponent = () => {
+    const Component = menuComponents[activeMenu];
+    if (!Component) return null;
+
+    const isTicket = activeMenu.startsWith('tickets');
+    const isLab = activeMenu.startsWith('labs');
+
+    const commonProps = {
+      setActiveMenu,
+      setSelectedLab,
+      setSelectedTicket,
+      onSubmit: () => setActiveMenu(isTicket ? 'tickets' : 'labs'),
+      onCancel: () => setActiveMenu(isTicket ? 'tickets' : 'labs'),
+    };
+
+    if (activeMenu === 'labs/edit') {
+      return <Component lab={selectedLab} {...commonProps} />;
+    }
+    if (activeMenu === 'tickets/edit') {
+      return <Component ticket={selectedTicket} {...commonProps} />;
+    }
+    return <Component {...commonProps} />;
   };
 
-  const handleMenuClick = (menu) => {
-    setActiveMenu(menu);
-  };
+  const navItems = [
+    { menu: 'dashboard', icon: 'tachometer-alt', text: 'Dashboard' },
+    { menu: 'manage-user', icon: 'table', text: 'Manage User' },
+    { menu: 'labs', icon: 'cog', text: 'Manage Labs' },
+    { menu: 'tickets', icon: 'ticket-alt', text: 'Tickets' },
+    { menu: 'logout', icon: 'sign-out-alt', text: 'Logout', action: handleLogout },
+  ];
 
   return (
     <div className="wrapper">
       <nav className="main-header navbar navbar-expand navbar-white navbar-light">
         <ul className="navbar-nav">
           <li className="nav-item">
-            <a
-              className="nav-link"
-              data-widget="pushmenu"
-              href="#"
-              role="button"
-              onClick={toggleSidebar}
-            >
+            <a className="nav-link" data-widget="pushmenu" href="#" role="button" onClick={toggleSidebar}>
               <i className="fas fa-bars"></i>
             </a>
           </li>
-          <li className="nav-item d-none d-sm-inline-block">
-            <a
-              href="#"
-              className="nav-link"
-              onClick={() => handleMenuClick('dashboard')}
-            >
-              Home
-            </a>
-          </li>
-          <li className="nav-item d-none d-sm-inline-block">
-            <a
-              href="#"
-              className="nav-link"
-              onClick={() => handleMenuClick('manage-user')}
-            >
-              Tables
-            </a>
-          </li>
-          <li className="nav-item d-none d-sm-inline-block">
-            <a
-              href="#"
-              className="nav-link"
-              onClick={() => handleMenuClick('labs')}
-            >
-              Labs
-            </a>
-          </li>
+          {navItems.slice(0, -1).map((item) => (
+            <li key={item.menu} className="nav-item d-none d-sm-inline-block">
+              <a href="#" className="nav-link" onClick={() => handleMenuClick(item.menu)}>
+                {item.text}
+              </a>
+            </li>
+          ))}
         </ul>
       </nav>
 
@@ -109,30 +128,18 @@ const DataTable = () => {
         <div className="sidebar">
           <nav className="mt-2">
             <ul className="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
-              <li className="nav-item has-treeview">
-                <a href="#" className="nav-link" onClick={() => handleMenuClick('dashboard')}>
-                  <i className="nav-icon fas fa-tachometer-alt"></i>
-                  <p>Dashboard</p>
-                </a>
-              </li>
-              <li className="nav-item has-treeview">
-                <a href="#" className="nav-link" onClick={() => handleMenuClick('manage-user')}>
-                  <i className="nav-icon fas fa-table"></i>
-                  <p>Manage User</p>
-                </a>
-              </li>
-              <li className="nav-item has-treeview">
-                <a href="#" className="nav-link" onClick={() => handleMenuClick('labs')}>
-                  <i className="nav-icon fas fa-cog"></i>
-                  <p>Manage Labs</p>
-                </a>
-              </li>
-              <li className="nav-item has-treeview">
-                <a href="#" className="nav-link" onClick={handleLogout}>
-                  <i className="nav-icon fas fa-sign-out-alt"></i>
-                  <p>Logout</p>
-                </a>
-              </li>
+              {navItems.map((item) => (
+                <li key={item.menu} className="nav-item has-treeview">
+                  <a 
+                    href="#" 
+                    className="nav-link" 
+                    onClick={item.action || (() => handleMenuClick(item.menu))}
+                  >
+                    <i className={`nav-icon fas fa-${item.icon}`}></i>
+                    <p>{item.text}</p>
+                  </a>
+                </li>
+              ))}
             </ul>
           </nav>
         </div>
@@ -143,13 +150,7 @@ const DataTable = () => {
           <div className="container-fluid">
             <div className="row mb-2">
               <div className="col-sm-6">
-                <h1>
-                  {activeMenu === 'dashboard' ? 'Dashboard' : 
-                   activeMenu === 'manage-user' ? 'Users' : 
-                   activeMenu === 'labs/create' ? 'Create New Lab' :
-                   activeMenu === 'labs/edit' ? 'Edit Lab' :
-                   activeMenu === 'labs' ? 'Labs' : ''}
-                </h1>
+                <h1>{menuTitles[activeMenu] || ''}</h1>
               </div>
             </div>
           </div>
@@ -158,27 +159,7 @@ const DataTable = () => {
         <section className="content">
           <div className="row">
             <div className="col-12">
-              {activeMenu === 'dashboard' && <Dashboard />}
-              {activeMenu === 'manage-user' && <Users />}
-              {activeMenu === 'labs' && (
-                <Labs 
-                  setActiveMenu={setActiveMenu}
-                  setSelectedLab={setSelectedLab}
-                />
-              )}
-              {activeMenu === 'labs/create' && (
-                <CreateLab 
-                  onSubmit={handleCreateLab}
-                  onCancel={() => setActiveMenu('labs')}
-                />
-              )}
-              {activeMenu === 'labs/edit' && selectedLab && (
-                <EditLab 
-                  lab={selectedLab}
-                  onSubmit={handleEditLab}
-                  onCancel={() => setActiveMenu('labs')}
-                />
-              )}
+              {renderActiveComponent()}
             </div>
           </div>
         </section>
@@ -190,11 +171,10 @@ const DataTable = () => {
         </div>
         <strong>
           Copyright &copy; 2014-2019 <a href="http://adminlte.io">AdminLTE.io</a>.
-        </strong>{' '}
-        All rights reserved.
+        </strong> All rights reserved.
       </footer>
     </div>
   );
 };
 
-export default DataTable;
+export default React.memo(DataTable);

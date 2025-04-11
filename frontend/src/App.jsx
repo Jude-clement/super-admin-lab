@@ -7,8 +7,10 @@ import Dashboard from './components/Dashboard';
 import Users from './components/Users';
 import ProtectedRoute from './components/ProtectedRoute';
 import Labs from './components/Labs';
-// import Licenses from './components/Licenses';
+import Tickets from './components/Tickets';
 import CreateLab from './components/CreateLab';
+import CreateTicket from './components/CreateTicket';
+import EditTicket from './components/EditTicket';
 
 const RouteTracker = () => {
   const location = useLocation();
@@ -43,8 +45,13 @@ function App() {
         <Route  path="/dashboard"  element={<ProtectedRoute><Dashboard /></ProtectedRoute> }/>
         <Route path="/manage-user" element={<ProtectedRoute><Users/></ProtectedRoute>} />
         <Route path="/labs" element={<ProtectedRoute><Labs/></ProtectedRoute>} />
+        <Route path="/tickets" element={<ProtectedRoute> <Tickets/> </ProtectedRoute>} />
+
  
         <Route path="/labs/create" element={<ProtectedRoute><CreateLab/></ProtectedRoute>} />
+        <Route path="tickets/create" element={<ProtectedRoute> <CreateTicket/> </ProtectedRoute>} />
+        <Route path="tickets/edit" element={<ProtectedRoute> <EditTicket/> </ProtectedRoute>} />
+        
       </Routes>
     </Router>
 </AuthProvider>

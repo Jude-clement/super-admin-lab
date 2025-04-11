@@ -5,6 +5,7 @@ use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\UserController;
 use App\Http\Controllers\API\LabController;
 use App\Http\Controllers\API\LicenseController;
+use App\Http\Controllers\API\TicketController;
 
 /*
 |--------------------------------------------------------------------------
@@ -65,6 +66,15 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('/check-expiry', [LicenseController::class, 'checkExpiry']);
         Route::get('/{license}/validate', [LicenseController::class, 'validateLicense']);
     });
+
+    // Ticket Routes
+Route::prefix('tickets')->group(function () {
+    Route::get('/', [TicketController::class, 'index']);
+    Route::post('/', [TicketController::class, 'store']);
+    Route::get('/{id}', [TicketController::class, 'show']);
+    Route::put('/{id}', [TicketController::class, 'update']);
+    Route::delete('/{id}', [TicketController::class, 'destroy']);
+});
 
     // System maintenance
     Route::prefix('system')->group(function () {

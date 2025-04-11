@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
+import { format, parse, isValid } from 'date-fns';
 
 const EditLab = ({ lab, onCancel, onSubmit }) => {
   // Status constants
@@ -14,30 +15,45 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
     contact_email: '',
     contact_phone: '',
     address: '',
-    // license_status: 'active', // Maintain string status for lab
     license_key: '',
     issued_date: '',
     issued_time: '12:00',
     expiry_date: '',
-    expiry_time: '12:00'
+    expiry_time: '12:00',
+    timezone: 'Asia/Kolkata' // Explicit timezone
   });
+  
   const [originalData, setOriginalData] = useState({});
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showTokenSection, setShowTokenSection] = useState(false);
+  const [dateFormatError, setDateFormatError] = useState(false);
 
-  // Helper function to format date for display (YYYY-MM-DD to DD-MM-YYYY)
-  const formatDisplayDate = (isoDate) => {
-    if (!isoDate) return '';
-    const [year, month, day] = isoDate.split('T')[0].split('-');
-    return `${day}-${month}-${year}`;
+  // Helper function to parse and validate date input
+  const parseDateInput = (dateString, timeString) => {
+    try {
+      const parsedDate = parse(`${dateString} ${timeString}`, 'dd-MM-yyyy HH:mm', new Date());
+      if (!isValid(parsedDate)) {
+        throw new Error('Invalid date');
+      }
+      return parsedDate;
+    } catch (error) {
+      setDateFormatError(true);
+      return null;
+    }
   };
 
-  // Helper function to format date for backend (DD-MM-YYYY to YYYY-MM-DD)
-  const formatBackendDate = (displayDate) => {
-    if (!displayDate) return '';
-    const [day, month, year] = displayDate.split('-');
-    return `${year}-${month}-${day}`;
+  // Format date for display (Date object to DD-MM-YYYY)
+  const formatDisplayDate = (date) => {
+    if (!date || !isValid(date)) return '';
+    return format(date, 'dd-MM-yyyy');
+  };
+
+  // Format date for backend (DD-MM-YYYY to YYYY-MM-DD HH:mm:ss)
+  const formatBackendDateTime = (dateString, timeString) => {
+    const parsedDate = parseDateInput(dateString, timeString);
+    if (!parsedDate) return null;
+    return format(parsedDate, 'yyyy-MM-dd HH:mm:ss');
   };
 
   useEffect(() => {
@@ -52,17 +68,18 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
         contact_email: lab.contact_email || '',
         contact_phone: lab.contact_phone || '',
         address: lab.address || '',
-        license_status: lab.license_status || 'active',
         license_key: license.license_key || '',
-        issued_date: formatDisplayDate(issuedDate.toISOString()),
-        issued_time: issuedDate.toTimeString().substring(0, 5),
-        expiry_date: formatDisplayDate(expiryDate.toISOString()),
-        expiry_time: expiryDate.toTimeString().substring(0, 5)
+        issued_date: formatDisplayDate(issuedDate),
+        issued_time: format(issuedDate, 'HH:mm'),
+        expiry_date: formatDisplayDate(expiryDate),
+        expiry_time: format(expiryDate, 'HH:mm'),
+        timezone: 'Asia/Kolkata'
       };
 
       setFormData(initialData);
       setOriginalData(initialData);
       setShowTokenSection(!!license.license_key);
+      setDateFormatError(false);
     }
   }, [lab]);
 
@@ -72,6 +89,11 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
       ...prev,
       [name]: value
     }));
+    
+    // Clear date format error when editing
+    if ((name === 'issued_date' || name === 'expiry_date') && dateFormatError) {
+      setDateFormatError(false);
+    }
   };
 
   const hasChanges = () => {
@@ -88,27 +110,38 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
     );
   };
 
-  const handleRegenerateToken = async () => {
-    try {
-      setIsSubmitting(true);
-      
-      // Convert display dates to backend format before creating Date objects
-      const backendIssuedDate = formatBackendDate(formData.issued_date);
-      const backendExpiryDate = formatBackendDate(formData.expiry_date);
-      
-      // Create properly formatted datetime strings
-      const issuedAt = `${backendIssuedDate} ${formData.issued_time}:00`;
-      const expiresAt = `${backendExpiryDate} ${formData.expiry_time}:00`;
-      
-          // Validate dates
-    if (new Date(expiresAt) <= new Date(issuedAt)) {
-      throw new Error('Expiry time must be after issued time');
+  const validateDates = () => {
+    const issuedDateTime = formatBackendDateTime(formData.issued_date, formData.issued_time);
+    const expiryDateTime = formatBackendDateTime(formData.expiry_date, formData.expiry_time);
+    
+    if (!issuedDateTime || !expiryDateTime) {
+      setErrors({ general: 'Invalid date format. Please use DD-MM-YYYY format' });
+      return false;
     }
     
+    if (new Date(expiryDateTime) <= new Date(issuedDateTime)) {
+      setErrors({ general: 'Expiry date must be after issued date' });
+      return false;
+    }
+    
+    return true;
+  };
+
+  const handleRegenerateToken = async () => {
+    if (!validateDates()) return;
+    
+    try {
+      setIsSubmitting(true);
+      setErrors({});
+      
+      const issuedAt = formatBackendDateTime(formData.issued_date, formData.issued_time);
+      const expiresAt = formatBackendDateTime(formData.expiry_date, formData.expiry_time);
+      
       const tokenResponse = await api.post('/licenses/generate-token', {
         lab_id: lab.lab_id,
         issued_at: issuedAt,
-        expires_at: expiresAt
+        expires_at: expiresAt,
+        timezone: formData.timezone
       });
 
       setFormData(prev => ({
@@ -117,7 +150,7 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
       }));
     } catch (err) {
       setErrors({
-        general: err.response?.data?.message || 'Failed to regenerate token'
+        general: err.response?.data?.message || 'Failed to regenerate token. Please check dates and try again.'
       });
     } finally {
       setIsSubmitting(false);
@@ -126,35 +159,38 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    if (!validateDates()) return;
+    
     setIsSubmitting(true);
     setErrors({});
     
     try {
-      // Update lab details - remove license_status since it's auto-managed
-      const labResponse = await api.put(`/labs/${lab.lab_id}`, {
+      // Update lab details
+      const labPayload = {
         lab_name: formData.lab_name,
         contact_person: formData.contact_person,
         contact_email: formData.contact_email,
         contact_phone: formData.contact_phone,
         address: formData.address
-      });
+      };
+      
+      const labResponse = await api.put(`/labs/${lab.lab_id}`, labPayload);
     
-      // Update license if exists - remove manual status setting
+      // Update license if exists
       if (showTokenSection && lab.licenses?.[0]) {
-        const backendIssuedDate = formatBackendDate(formData.issued_date);
-        const backendExpiryDate = formatBackendDate(formData.expiry_date);
-        
-        await api.put(`/licenses/${lab.licenses[0].license_id}`, {
+        const licensePayload = {
           license_key: formData.license_key,
-          issued_date: `${backendIssuedDate} ${formData.issued_time}:00`,
-          expiry_date: `${backendExpiryDate} ${formData.expiry_time}:00`
-          // Status will be auto-updated by scheduler
-        });
+          issued_date: formatBackendDateTime(formData.issued_date, formData.issued_time),
+          expiry_date: formatBackendDateTime(formData.expiry_date, formData.expiry_time),
+          timezone: formData.timezone
+        };
+        
+        await api.put(`/licenses/${lab.licenses[0].license_id}`, licensePayload);
       }
     
       onSubmit(labResponse.data.data);
-    } 
-    catch (err) {
+    } catch (err) {
       if (err.response?.data?.errors) {
         setErrors(err.response.data.errors);
       } else {
@@ -176,6 +212,12 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
         <div className="card-body">
           {errors.general && (
             <div className="alert alert-danger">{errors.general}</div>
+          )}
+          
+          {dateFormatError && (
+            <div className="alert alert-warning">
+              Please enter dates in DD-MM-YYYY format
+            </div>
           )}
           
           <form onSubmit={handleSubmit}>
@@ -258,33 +300,19 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
                     <div className="invalid-feedback">{errors.address}</div>
                   )}
                 </div>
-                
-                {/* <div className="form-group">
-                  <label>License Status *</label>
-                  <select
-                    name="license_status"
-                    className={`form-control ${errors.license_status ? 'is-invalid' : ''}`}
-                    value={formData.license_status}
-                    onChange={handleChange}
-                    required
-                  >
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
-                  {errors.license_status && (
-                    <div className="invalid-feedback">{errors.license_status}</div>
-                  )}
-                </div> */}
               </div>
             </div>
 
             {showTokenSection && (
               <div className="border p-3 mb-3 mt-3">
                 <h5>License Information</h5>
+                <div className="alert alert-info">
+                  <strong>Timezone:</strong> {formData.timezone}
+                </div>
                 <div className="row">
                   <div className="col-md-6">
                     <div className="form-group">
-                      <label>Issued Date *</label>
+                      <label>Issued Date (DD-MM-YYYY) *</label>
                       <input
                         type="text"
                         name="issued_date"
@@ -292,6 +320,7 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
                         value={formData.issued_date}
                         onChange={handleChange}
                         placeholder="DD-MM-YYYY"
+                        pattern="\d{2}-\d{2}-\d{4}"
                         required
                       />
                       {errors.issued_date && (
@@ -312,7 +341,7 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
                   </div>
                   <div className="col-md-6">
                     <div className="form-group">
-                      <label>Expiry Date *</label>
+                      <label>Expiry Date (DD-MM-YYYY) *</label>
                       <input
                         type="text"
                         name="expiry_date"
@@ -320,6 +349,7 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
                         value={formData.expiry_date}
                         onChange={handleChange}
                         placeholder="DD-MM-YYYY"
+                        pattern="\d{2}-\d{2}-\d{4}"
                         required
                       />
                       {errors.expiry_date && (
@@ -359,7 +389,7 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
                         onClick={handleRegenerateToken}
                         disabled={isSubmitting || !hasLicenseDateChanges()}
                       >
-                        Regenerate
+                        {isSubmitting ? 'Generating...' : 'Regenerate Token'}
                       </button>
                     </div>
                   </div>
@@ -367,7 +397,7 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
                     <div className="invalid-feedback">{errors.license_key}</div>
                   )}
                   <small className="form-text text-muted">
-                    Token valid from {formData.issued_date} {formData.issued_time} to {formData.expiry_date} {formData.expiry_time}
+                    Token valid from {formData.issued_date} {formData.issued_time} to {formData.expiry_date} {formData.expiry_time} ({formData.timezone})
                   </small>
                 </div>
               </div>
