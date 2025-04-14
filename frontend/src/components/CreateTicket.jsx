@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import api from '../api';
 
 const CreateTicket = ({ onCancel, onSubmit }) => {
-  const [formData, setFormData] = useState({
+  const initialFormData = {
     title: '',
     description: '',
     status: 'open',
@@ -13,99 +13,128 @@ const CreateTicket = ({ onCancel, onSubmit }) => {
     representer_phone: '',
     eta: '',
     client_id: ''
-  });
+  };
 
+  const [formData, setFormData] = useState(initialFormData);
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [filePreview, setFilePreview] = useState(null);
   const [fileType, setFileType] = useState(null);
   const [attachmentError, setAttachmentError] = useState('');
 
-  const handleChange = (e) => {
+  const handleChange = useCallback((e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-  };
+  }, []);
 
-  const handleFileChange = (e) => {
+  const handleFileChange = useCallback((e) => {
     const file = e.target.files[0];
-    if (file) {
-      // Validate file type and size
-      const validImageTypes = ['image/jpeg', 'image/png', 'image/gif'];
-      const validVideoTypes = ['video/mp4', 'video/quicktime', 'video/x-msvideo'];
-      const validTypes = [...validImageTypes, ...validVideoTypes];
-      const maxSize = 20 * 1024 * 1024; // 20MB
+    if (!file) return;
 
-      if (!validTypes.includes(file.type)) {
-        setAttachmentError('Invalid file type. Please upload an image (JPEG, PNG, GIF) or video (MP4, MOV, AVI)');
-        return;
-      }
+    const validImageTypes = ['image/jpeg', 'image/png', 'image/gif'];
+    const validVideoTypes = ['video/mp4', 'video/quicktime', 'video/x-msvideo'];
+    const validTypes = [...validImageTypes, ...validVideoTypes];
+    const maxSize = 20 * 1024 * 1024; // 20MB
 
-      if (file.size > maxSize) {
-        setAttachmentError('File too large. Maximum size is 20MB');
-        return;
-      }
-
-      setFormData(prev => ({ ...prev, attachment: file }));
-      setAttachmentError('');
-      setFileType(file.type.startsWith('image/') ? 'image' : 'video');
-
-      if (file.type.startsWith('image/')) {
-        setFilePreview(URL.createObjectURL(file));
-      } else {
-        setFilePreview(null); // No preview for videos
-      }
+    if (!validTypes.includes(file.type)) {
+      setAttachmentError('Invalid file type. Please upload an image (JPEG, PNG, GIF) or video (MP4, MOV, AVI)');
+      return;
     }
-  };
 
-  const handleSubmit = async (e) => {
+    if (file.size > maxSize) {
+      setAttachmentError('File too large. Maximum size is 20MB');
+      return;
+    }
+
+    setFormData(prev => ({ ...prev, attachment: file }));
+    setAttachmentError('');
+    setFileType(file.type.startsWith('image/') ? 'image' : 'video');
+    setFilePreview(file.type.startsWith('image/') ? URL.createObjectURL(file) : null);
+  }, []);
+
+  const validateForm = useCallback(() => {
+    const requiredFields = [
+      'title', 'description', 'representer_name', 
+      'representer_email', 'representer_phone', 'client_id'
+    ];
+    const validationErrors = {};
+
+    requiredFields.forEach(field => {
+      if (!formData[field]) {
+        validationErrors[field] = `${field.replace('_', ' ')} is required`;
+      }
+    });
+
+    setErrors(validationErrors);
+    return Object.keys(validationErrors).length === 0;
+  }, [formData]);
+
+  const handleSubmit = useCallback(async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-    setErrors({});
 
-    // Validate form
-    const validationErrors = {};
-    if (!formData.title) validationErrors.title = 'Title is required';
-    if (!formData.description) validationErrors.description = 'Description is required';
-    if (!formData.representer_name) validationErrors.representer_name = 'Representer name is required';
-    if (!formData.representer_email) validationErrors.representer_email = 'Representer email is required';
-    if (!formData.representer_phone) validationErrors.representer_phone = 'Representer phone is required';
-    if (!formData.client_id) validationErrors.client_id = 'Client ID is required';
-
-    if (Object.keys(validationErrors).length > 0) {
-      setErrors(validationErrors);
+    if (!validateForm()) {
       setIsSubmitting(false);
       return;
     }
 
     try {
-      // Create FormData for file upload
       const formPayload = new FormData();
-      Object.keys(formData).forEach(key => {
-        if (formData[key] !== null && formData[key] !== undefined) {
-          formPayload.append(key, formData[key]);
+      Object.entries(formData).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+          formPayload.append(key, value);
         }
       });
 
       const response = await api.post('/tickets', formPayload, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
 
       onSubmit(response.data);
     } catch (err) {
       const backendErrors = err.response?.data?.errors || {};
-      if (Object.keys(backendErrors).length > 0) {
-        setErrors(backendErrors);
-      } else {
-        setErrors({
-          general: err.response?.data?.message || 'Failed to create ticket'
-        });
-      }
+      setErrors(backendErrors.general ? { general: backendErrors.general } : backendErrors);
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [formData, onSubmit, validateForm]);
+
+  const renderFormField = (name, label, type = 'text', options = null) => (
+    <div className="form-group">
+      <label>{label} {errors[name] && '*'}</label>
+      {type === 'select' ? (
+        <select
+          name={name}
+          className="form-control"
+          value={formData[name]}
+          onChange={handleChange}
+        >
+          {options.map(option => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      ) : type === 'textarea' ? (
+        <textarea
+          name={name}
+          className={`form-control ${errors[name] ? 'is-invalid' : ''}`}
+          value={formData[name]}
+          onChange={handleChange}
+          style={{ height: '7.75rem' }}
+        />
+      ) : (
+        <input
+          type={type}
+          name={name}
+          className={`form-control ${errors[name] ? 'is-invalid' : ''}`}
+          value={formData[name]}
+          onChange={handleChange}
+        />
+      )}
+      {errors[name] && <div className="invalid-feedback">{errors[name]}</div>}
+    </div>
+  );
 
   return (
     <div className="container mt-4">
@@ -114,156 +143,52 @@ const CreateTicket = ({ onCancel, onSubmit }) => {
           <h2 className="mb-0">Create New Ticket</h2>
         </div>
         <div className="card-body">
-          {errors.general && (
-            <div className="alert alert-danger">{errors.general}</div>
-          )}
+          {errors.general && <div className="alert alert-danger">{errors.general}</div>}
 
           <form onSubmit={handleSubmit}>
             <div className="row">
               <div className="col-md-6">
-                <div className="form-group">
-                  <label>Title *</label>
-                  <input
-                    type="text"
-                    name="title"
-                    className={`form-control ${errors.title ? 'is-invalid' : ''}`}
-                    value={formData.title}
-                    onChange={handleChange}
-                  />
-                  {errors.title && (
-                    <div className="invalid-feedback">{errors.title}</div>
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label>Description *</label>
-                  <textarea
-                    name="description"
-                    className={`form-control ${errors.description ? 'is-invalid' : ''}`}
-                    value={formData.description}
-                    onChange={handleChange}
-                    rows={4}
-                  />
-                  {errors.description && (
-                    <div className="invalid-feedback">{errors.description}</div>
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label>Status</label>
-                  <select
-                    name="status"
-                    className="form-control"
-                    value={formData.status}
-                    onChange={handleChange}
-                  >
-                    <option value="open">Open</option>
-                    <option value="inprogress">In Progress</option>
-                    <option value="closed">Closed</option>
-                  </select>
-                </div>
+                {renderFormField('title', 'Title *')}
+                {renderFormField('description', 'Description *', 'textarea')}
+                {renderFormField('status', 'Status', 'select', [
+                  { value: 'open', label: 'Open' },
+                  { value: 'inprogress', label: 'In Progress' },
+                  { value: 'closed', label: 'Closed' }
+                ])}
               </div>
 
               <div className="col-md-6">
-                <div className="form-group">
-                  <label>Assignee</label>
-                  <input
-                    type="text"
-                    name="assignee"
-                    className="form-control"
-                    value={formData.assignee}
-                    onChange={handleChange}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Representer Name *</label>
-                  <input
-                    type="text"
-                    name="representer_name"
-                    className={`form-control ${errors.representer_name ? 'is-invalid' : ''}`}
-                    value={formData.representer_name}
-                    onChange={handleChange}
-                  />
-                  {errors.representer_name && (
-                    <div className="invalid-feedback">{errors.representer_name}</div>
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label>Representer Email *</label>
-                  <input
-                    type="email"
-                    name="representer_email"
-                    className={`form-control ${errors.representer_email ? 'is-invalid' : ''}`}
-                    value={formData.representer_email}
-                    onChange={handleChange}
-                  />
-                  {errors.representer_email && (
-                    <div className="invalid-feedback">{errors.representer_email}</div>
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label>Representer Phone *</label>
-                  <input
-                    type="text"
-                    name="representer_phone"
-                    className={`form-control ${errors.representer_phone ? 'is-invalid' : ''}`}
-                    value={formData.representer_phone}
-                    onChange={handleChange}
-                  />
-                  {errors.representer_phone && (
-                    <div className="invalid-feedback">{errors.representer_phone}</div>
-                  )}
-                </div>
+                {renderFormField('assignee', 'Assignee')}
+                {renderFormField('representer_name', 'Representer Name *')}
+                {renderFormField('representer_email', 'Representer Email *', 'email')}
+                {renderFormField('representer_phone', 'Representer Phone *')}
               </div>
             </div>
 
             <div className="row">
               <div className="col-md-6">
-                <div className="form-group">
-                  <label>Client ID *</label>
-                  <input
-                    type="text"
-                    name="client_id"
-                    className={`form-control ${errors.client_id ? 'is-invalid' : ''}`}
-                    value={formData.client_id}
-                    onChange={handleChange}
-                  />
-                  {errors.client_id && (
-                    <div className="invalid-feedback">{errors.client_id}</div>
-                  )}
-                </div>
+                {renderFormField('client_id', 'Client ID *')}
               </div>
-
               <div className="col-md-6">
-                <div className="form-group">
-                  <label>ETA</label>
-                  <input
-                    type="date"
-                    name="eta"
-                    className="form-control"
-                    value={formData.eta}
-                    onChange={handleChange}
-                  />
-                </div>
+                {renderFormField('eta', 'ETA', 'date')}
               </div>
             </div>
 
             <div className="form-group">
-              <label>Attachment (Image/Video)</label>
-              <input
-                type="file"
-                className={`form-control ${attachmentError ? 'is-invalid' : ''}`}
-                onChange={handleFileChange}
-                accept="image/*,video/*"
-              />
+              <label className="mb-2">Attachment (Image/Video)</label>
+              <div className="p-2 border rounded d-flex align-items-center justify-content-between">
+                <input
+                  type="file"
+                  className={`form-control-file w-100 ${attachmentError ? 'is-invalid' : ''}`}
+                  onChange={handleFileChange}
+                  accept="image/*,video/*"
+                />
+              </div>
               {attachmentError && (
-                <div className="invalid-feedback d-block">{attachmentError}</div>
+                <div className="invalid-feedback d-block mt-1">{attachmentError}</div>
               )}
               {filePreview && fileType === 'image' && (
-                <div className="mt-2">
+                <div className="mt-3">
                   <small>Preview:</small>
                   <img 
                     src={filePreview} 
@@ -311,4 +236,4 @@ const CreateTicket = ({ onCancel, onSubmit }) => {
   );
 };
 
-export default CreateTicket;
+export default React.memo(CreateTicket);

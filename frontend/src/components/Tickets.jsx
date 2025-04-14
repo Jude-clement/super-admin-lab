@@ -2,7 +2,7 @@ import React, { useEffect, useState, Suspense } from 'react';
 import api from '../api';
 
 // Lazy load only the delete modal component
-const DeleteTicketModal = React.lazy(() => import('./CreateTicket'));
+const DeleteTicketModal = React.lazy(() => import('./DeleteTicketModal'));
 
 const Tickets = ({ setActiveMenu, setSelectedTicket }) => {
   const [tickets, setTickets] = useState([]);
@@ -200,56 +200,61 @@ const Tickets = ({ setActiveMenu, setSelectedTicket }) => {
                       </td>
                       {hasTableActionPermissions() && (
                         <td style={{ textAlign: 'center' }}>
-                          {hasPermission('update') && (
-                            <>
-                              <button
-                                style={{ width: '70%', margin: '0 5px' }}
-                                className="btn btn-warning btn-sm mb-1"
-                                onClick={() => {
-                                  setSelectedTicket(ticket);
-                                  setActiveMenu('tickets/edit');
-                                }}
-                              >
-                                Edit
-                              </button>
-                              <div className="btn-group btn-group-sm mb-1">
-                                <button
-                                  className={`btn btn-sm ${ticket.status === TICKET_STATUS.OPEN ? 'btn-primary active' : 'btn-outline-primary'}`}
-                                  onClick={() => handleStatusChange(ticket.id, TICKET_STATUS.OPEN)}
-                                  title="Set to Open"
-                                >
-  <i className="fas fa-file-alt fa-lg"></i>
-  </button>
-                                <button
-                                  className={`btn btn-sm ${ticket.status === TICKET_STATUS.INPROGRESS ? 'btn-info active' : 'btn-outline-info'}`}
-                                  onClick={() => handleStatusChange(ticket.id, TICKET_STATUS.INPROGRESS)}
-                                  title="Set to In Progress"
-                                >
-                                  <i className="fas fa-spinner"></i>
-                                </button>
-                                <button
-                                  className={`btn btn-sm ${ticket.status === TICKET_STATUS.CLOSED ? 'btn-success active' : 'btn-outline-success'}`}
-                                  onClick={() => handleStatusChange(ticket.id, TICKET_STATUS.CLOSED)}
-                                  title="Set to Closed"
-                                >
-                                  <i className="fas fa-check"></i>
-                                </button>
-                              </div>
-                            </>
-                          )}
-                          {hasPermission('delete') && (
-                            <button
-                              style={{ width: '70%', margin: '0 5px' }}
-                              className="btn btn-danger btn-sm mb-1"
-                              onClick={() => {
-                                setCurrentTicketToDelete(ticket);
-                                setShowDeleteModal(true);
-                              }}
-                            >
-                              Delete
-                            </button>
-                          )}
-                        </td>
+  {hasPermission('update') && (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+      <button
+        style={{ width: '100%', maxWidth: '200px' }}
+        className="btn btn-warning btn-sm"
+        onClick={() => {
+          setSelectedTicket(ticket);
+          setActiveMenu('tickets/edit');
+        }}
+      >
+        Edit
+      </button>
+      <div className="btn-group btn-group-sm" style={{ width: '100%', maxWidth: '200px' }}>
+        <button
+          className={`btn btn-sm ${ticket.status === TICKET_STATUS.OPEN ? 'btn-primary active' : 'btn-outline-primary'}`}
+          onClick={() => handleStatusChange(ticket.id, TICKET_STATUS.OPEN)}
+          title="Set to Open"
+          style={{ flex: 1 }}
+        >
+          <i className="fas fa-file-alt fa-lg"></i>
+        </button>
+        <button
+          className={`btn btn-sm ${ticket.status === TICKET_STATUS.INPROGRESS ? 'btn-info active' : 'btn-outline-info'}`}
+          onClick={() => handleStatusChange(ticket.id, TICKET_STATUS.INPROGRESS)}
+          title="Set to In Progress"
+          style={{ flex: 1 }}
+        >
+          <i className="fas fa-spinner"></i>
+        </button>
+        <button
+          className={`btn btn-sm ${ticket.status === TICKET_STATUS.CLOSED ? 'btn-success active' : 'btn-outline-success'}`}
+          onClick={() => handleStatusChange(ticket.id, TICKET_STATUS.CLOSED)}
+          title="Set to Closed"
+          style={{ flex: 1 }}
+        >
+          <i className="fas fa-check"></i>
+        </button>
+      </div>
+    </div>
+  )}
+  {hasPermission('delete') && (
+    <div style={{ marginTop: '4px', width: '100%', display: 'flex', justifyContent: 'center' }}>
+      <button
+        style={{ width: '100%', maxWidth: '200px' }}
+        className="btn btn-danger btn-sm"
+        onClick={() => {
+          setCurrentTicketToDelete(ticket);
+          setShowDeleteModal(true);
+        }}
+      >
+        Delete
+      </button>
+    </div>
+  )}
+</td>
                       )}
                     </tr>
                   );
