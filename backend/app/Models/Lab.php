@@ -18,6 +18,7 @@ class Lab extends Model
         'contact_email',
         'contact_phone',
         'address',
+        'app_url',
         'numeric_status', // Add this to allow mass assignment
         'license_status' // Maintains string status for backward compatibility
     ];

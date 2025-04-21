@@ -22,11 +22,11 @@ use App\Http\Controllers\API\TicketController;
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/refresh', [AuthController::class, 'refresh']);
-Route::post('/licenses/validate', [LicenseController::class, 'validateToken']); // Public token validation
-Route::get('/licenses/{id}/check-status', [LicenseController::class, 'checkLicenseStatus']);
 
-// Add to routes/api.php:
-// Route::post('/licenses/{license}/sync-status', [LicenseController::class, 'syncStatus']);
+// Token validation routes (public)
+Route::get('/licenses/validate-token', [LicenseController::class, 'validateToken']); // Changed to GET
+Route::post('/licenses/validate', [LicenseController::class, 'validateToken']); // Keep POST for backward compatibility
+Route::get('/licenses/{id}/check-status', [LicenseController::class, 'checkLicenseStatus']);
 
 // Protected routes (require authentication)
 Route::middleware(['auth:sanctum'])->group(function () {

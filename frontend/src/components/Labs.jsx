@@ -177,6 +177,7 @@ const Labs = ({ setActiveMenu, setSelectedLab }) => {
               <tr>
                 <th style={{ textAlign: 'center' }}>ID</th>
                 <th style={{ textAlign: 'center' }}>Lab Name</th>
+                <th style={{ textAlign: 'center' }}>App url</th>
                 <th style={{ textAlign: 'center' }}>Contact Info</th>
                 <th style={{ textAlign: 'center' }}>Address</th>
                 <th style={{ textAlign: 'center' }}>License Status</th>
@@ -195,6 +196,7 @@ const Labs = ({ setActiveMenu, setSelectedLab }) => {
                     <tr key={lab.lab_id}>
                       <td style={{ textAlign: 'center' }}>{lab.lab_id}</td>
                       <td style={{ textAlign: 'center' }}>{lab.lab_name}</td>
+                      <td style={{ textAlign: 'center' }}>{lab.app_url}</td>
                       <td style={{ textAlign: 'center' }}>
                         {lab.contact_person}<br/>
                         {lab.contact_email}<br/>

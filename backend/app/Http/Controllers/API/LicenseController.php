@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Carbon\Carbon;
 use App\Services\LicenseService;
+use Illuminate\Support\Facades\Log;
 
 class LicenseController extends Controller
 {
@@ -42,7 +43,7 @@ class LicenseController extends Controller
         $expiryDate = Carbon::createFromFormat('Y-m-d H:i:s', $validated['expiry_date'], $timezone);
         $now = Carbon::now($timezone);
     
-        // Generate JWT token
+        // Generate encrypted JWT token
         $token = $this->licenseService->generateTokenForLab(
             $validated['client_id'],
             $issuedDate,
@@ -108,27 +109,35 @@ class LicenseController extends Controller
 
     public function show(License $license)
     {
-        $isValid = $this->licenseService->validateToken($license->license_key);
-        $tokenData = $this->licenseService->getTokenData($license->license_key);
+        try {
+            $isValid = $this->licenseService->validateToken($license->license_key);
+            $tokenData = $this->licenseService->getTokenData($license->license_key);
 
-        $now = Carbon::now();
-        $isActive = $now->between(
-            Carbon::parse($license->issued_date),
-            Carbon::parse($license->expiry_date)
-        );
+            $now = Carbon::now();
+            $isActive = $now->between(
+                Carbon::parse($license->issued_date),
+                Carbon::parse($license->expiry_date)
+            );
 
-        return response()->json([
-            'result' => true,
-            'data' => array_merge(
-                $license->load('lab')->toArray(),
-                [
-                    'token_valid' => $isValid,
-                    'token_data' => $tokenData,
-                    'is_active' => $isActive,
-                    'correct_status' => $license->status === ($isActive ? License::ACTIVE : License::DEACTIVATED)
-                ]
-            )
-        ]);
+            return response()->json([
+                'result' => true,
+                'data' => array_merge(
+                    $license->load('lab')->toArray(),
+                    [
+                        'token_valid' => $isValid,
+                        'token_data' => $tokenData,
+                        'is_active' => $isActive,
+                        'correct_status' => $license->status === ($isActive ? License::ACTIVE : License::DEACTIVATED)
+                    ]
+                )
+            ]);
+        } catch (\Exception $e) {
+            Log::error("Failed to show license: " . $e->getMessage());
+            return response()->json([
+                'result' => false,
+                'message' => 'Failed to retrieve license information'
+            ], 500);
+        }
     }
 
     public function update(Request $request, License $license)
@@ -166,7 +175,7 @@ class LicenseController extends Controller
             $validated['expiry_date'] = Carbon::parse($validated['expiry_date'])->format('Y-m-d H:i:s');
         }
     
-        // Regenerate token if expiry date changed
+        // Regenerate encrypted token if expiry date changed
         if (isset($validated['expiry_date'])) {
             $validated['license_key'] = $this->licenseService->generateTokenForLab(
                 $license->client_id,
@@ -197,119 +206,166 @@ class LicenseController extends Controller
 
     public function destroy(License $license)
     {
-        $labId = $license->client_id;
-        $license->delete();
+        try {
+            $labId = $license->client_id;
+            $license->delete();
 
-        // Update lab status if no licenses left
-        if (License::where('client_id', $labId)->count() === 0) {
-            Lab::where('lab_id', $labId)
-               ->update([
-                   'license_status' => 'inactive',
-                   'numeric_status' => License::DEACTIVATED
-               ]);
+            // Update lab status if no licenses left
+            if (License::where('client_id', $labId)->count() === 0) {
+                Lab::where('lab_id', $labId)
+                   ->update([
+                       'license_status' => 'inactive',
+                       'numeric_status' => License::DEACTIVATED
+                   ]);
+            }
+
+            return response()->json([
+                'result' => true,
+                'message' => 'License deleted successfully'
+            ]);
+        } catch (\Exception $e) {
+            Log::error("Failed to delete license: " . $e->getMessage());
+            return response()->json([
+                'result' => false,
+                'message' => 'Failed to delete license'
+            ], 500);
         }
-
-        return response()->json([
-            'result' => true,
-            'message' => 'License deleted successfully'
-        ]);
     }
 
     public function activate(License $license)
     {
-        $license->update(['status' => License::ACTIVE]);
-        Lab::where('lab_id', $license->client_id)
-           ->update([
-               'license_status' => 'active',
-               'numeric_status' => License::ACTIVE
-           ]);
+        try {
+            $license->update(['status' => License::ACTIVE]);
+            Lab::where('lab_id', $license->client_id)
+               ->update([
+                   'license_status' => 'active',
+                   'numeric_status' => License::ACTIVE
+               ]);
 
-        return response()->json([
-            'result' => true,
-            'message' => 'License activated successfully'
-        ]);
+            return response()->json([
+                'result' => true,
+                'message' => 'License activated successfully'
+            ]);
+        } catch (\Exception $e) {
+            Log::error("Failed to activate license: " . $e->getMessage());
+            return response()->json([
+                'result' => false,
+                'message' => 'Failed to activate license'
+            ], 500);
+        }
     }
 
     public function deactivate(License $license)
     {
-        $license->update(['status' => License::DEACTIVATED]);
-        
-        if (License::where('client_id', $license->client_id)
-                 ->where('status', License::ACTIVE)
-                 ->count() === 0) {
-            Lab::where('lab_id', $license->client_id)
-               ->update([
-                   'license_status' => 'inactive',
-                   'numeric_status' => License::DEACTIVATED
-               ]);
-        }
+        try {
+            $license->update(['status' => License::DEACTIVATED]);
+            
+            if (License::where('client_id', $license->client_id)
+                     ->where('status', License::ACTIVE)
+                     ->count() === 0) {
+                Lab::where('lab_id', $license->client_id)
+                   ->update([
+                       'license_status' => 'inactive',
+                       'numeric_status' => License::DEACTIVATED
+                   ]);
+            }
 
-        return response()->json([
-            'result' => true,
-            'message' => 'License deactivated successfully'
-        ]);
+            return response()->json([
+                'result' => true,
+                'message' => 'License deactivated successfully'
+            ]);
+        } catch (\Exception $e) {
+            Log::error("Failed to deactivate license: " . $e->getMessage());
+            return response()->json([
+                'result' => false,
+                'message' => 'Failed to deactivate license'
+            ], 500);
+        }
     }
 
     public function checkExpiry()
     {
-        $expiredLicenses = License::where('expiry_date', '<', Carbon::now())
-                                 ->where('status', '!=', License::DEACTIVATED)
-                                 ->get();
+        try {
+            $expiredLicenses = License::where('expiry_date', '<', Carbon::now())
+                                     ->where('status', '!=', License::DEACTIVATED)
+                                     ->get();
 
-        foreach ($expiredLicenses as $license) {
-            $license->update(['status' => License::DEACTIVATED]);
-            Lab::where('lab_id', $license->client_id)
-               ->update([
-                   'license_status' => 'inactive',
-                   'numeric_status' => License::DEACTIVATED
-               ]);
+            foreach ($expiredLicenses as $license) {
+                $license->update(['status' => License::DEACTIVATED]);
+                Lab::where('lab_id', $license->client_id)
+                   ->update([
+                       'license_status' => 'inactive',
+                       'numeric_status' => License::DEACTIVATED
+                   ]);
+            }
+
+            return response()->json([
+                'result' => true,
+                'message' => 'Expired licenses processed',
+                'count' => $expiredLicenses->count()
+            ]);
+        } catch (\Exception $e) {
+            Log::error("Failed to check license expiry: " . $e->getMessage());
+            return response()->json([
+                'result' => false,
+                'message' => 'Failed to process expired licenses'
+            ], 500);
         }
-
-        return response()->json([
-            'result' => true,
-            'message' => 'Expired licenses processed',
-            'count' => $expiredLicenses->count()
-        ]);
     }
 
     public function validateToken(Request $request)
     {
-        $validated = $request->validate([
-            'token' => 'required|string'
-        ]);
+        try {
+            $validated = $request->validate([
+                'token' => 'required|string'
+            ]);
 
-        $validation = $this->licenseService->validateTokenWithDates($validated['token']);
+            $validation = $this->licenseService->validateTokenWithDates($validated['token']);
 
-        return response()->json([
-            'valid' => $validation['valid'] ?? false,
-            'data' => [
-                'issued_at' => $validation['issued_at'] ?? null,
-                'expires_at' => $validation['expires_at'] ?? null
-            ],
-            'message' => $validation['valid'] ? 'License is valid' : 'License is invalid or expired'
-        ]);
+            return response()->json([
+                'valid' => $validation['valid'] ?? false,
+                'data' => [
+                    'issued_at' => $validation['issued_at'] ?? null,
+                    'expires_at' => $validation['expires_at'] ?? null
+                ],
+                'message' => $validation['valid'] ? 'License is valid' : 'License is invalid or expired'
+            ]);
+        } catch (\Exception $e) {
+            Log::error("Token validation failed: " . $e->getMessage());
+            return response()->json([
+                'valid' => false,
+                'message' => 'Token validation failed'
+            ], 500);
+        }
     }
 
     public function checkLicenseStatus(License $license)
     {
-        $now = Carbon::now();
-        $shouldBeActive = $now->between(
-            Carbon::parse($license->issued_date),
-            Carbon::parse($license->expiry_date)
-        );
+        try {
+            $now = Carbon::now();
+            $shouldBeActive = $now->between(
+                Carbon::parse($license->issued_date),
+                Carbon::parse($license->expiry_date)
+            );
 
-        return response()->json([
-            'result' => true,
-            'data' => [
-                'license_id' => $license->license_id,
-                'current_status' => $license->status,
-                'should_be_active' => $shouldBeActive,
-                'is_correct_status' => $license->status === ($shouldBeActive ? License::ACTIVE : License::DEACTIVATED),
-                'issued_date' => $license->issued_date,
-                'expiry_date' => $license->expiry_date,
-                'current_time' => $now->toDateTimeString()
-            ]
-        ]);
+            return response()->json([
+                'result' => true,
+                'data' => [
+                    'license_id' => $license->license_id,
+                    'current_status' => $license->status,
+                    'should_be_active' => $shouldBeActive,
+                    'is_correct_status' => $license->status === ($shouldBeActive ? License::ACTIVE : License::DEACTIVATED),
+                    'issued_date' => $license->issued_date,
+                    'expiry_date' => $license->expiry_date,
+                    'current_time' => $now->toDateTimeString()
+                ]
+            ]);
+        } catch (\Exception $e) {
+            Log::error("Failed to check license status: " . $e->getMessage());
+            return response()->json([
+                'result' => false,
+                'message' => 'Failed to check license status'
+            ], 500);
+        }
     }
-
 }

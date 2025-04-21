@@ -3,7 +3,6 @@ import api from '../api';
 import { format, parse, isValid } from 'date-fns';
 
 const EditLab = ({ lab, onCancel, onSubmit }) => {
-  // Status constants
   const LICENSE_STATUS = {
     DEACTIVATED: 0,
     ACTIVE: 1
@@ -11,6 +10,7 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
 
   const [formData, setFormData] = useState({
     lab_name: '',
+    app_url: '',
     contact_person: '',
     contact_email: '',
     contact_phone: '',
@@ -20,7 +20,7 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
     issued_time: '12:00',
     expiry_date: '',
     expiry_time: '12:00',
-    timezone: 'Asia/Kolkata' // Explicit timezone
+    timezone: 'Asia/Kolkata'
   });
   
   const [originalData, setOriginalData] = useState({});
@@ -28,8 +28,8 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showTokenSection, setShowTokenSection] = useState(false);
   const [dateFormatError, setDateFormatError] = useState(false);
+  const [tokenDetails, setTokenDetails] = useState(null);
 
-  // Helper function to parse and validate date input
   const parseDateInput = (dateString, timeString) => {
     try {
       const parsedDate = parse(`${dateString} ${timeString}`, 'dd-MM-yyyy HH:mm', new Date());
@@ -43,13 +43,11 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
     }
   };
 
-  // Format date for display (Date object to DD-MM-YYYY)
   const formatDisplayDate = (date) => {
     if (!date || !isValid(date)) return '';
     return format(date, 'dd-MM-yyyy');
   };
 
-  // Format date for backend (DD-MM-YYYY to YYYY-MM-DD HH:mm:ss)
   const formatBackendDateTime = (dateString, timeString) => {
     const parsedDate = parseDateInput(dateString, timeString);
     if (!parsedDate) return null;
@@ -64,6 +62,7 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
       
       const initialData = {
         lab_name: lab.lab_name || '',
+        app_url: lab.app_url || '',
         contact_person: lab.contact_person || '',
         contact_email: lab.contact_email || '',
         contact_phone: lab.contact_phone || '',
@@ -80,8 +79,26 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
       setOriginalData(initialData);
       setShowTokenSection(!!license.license_key);
       setDateFormatError(false);
+
+      // Validate existing token if present
+      if (license.license_key) {
+        validateExistingToken(license.license_key);
+      }
     }
   }, [lab]);
+
+  const validateExistingToken = async (token) => {
+    try {
+      const response = await api.get(`/licenses/validate-token?token=${encodeURIComponent(token)}`);
+      setTokenDetails({
+        valid: response.data.valid,
+        issued_at: response.data.data?.issued_at,
+        expires_at: response.data.data?.expires_at
+      });
+    } catch (error) {
+      console.error("Token validation failed:", error);
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -90,7 +107,6 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
       [name]: value
     }));
     
-    // Clear date format error when editing
     if ((name === 'issued_date' || name === 'expiry_date') && dateFormatError) {
       setDateFormatError(false);
     }
@@ -144,10 +160,19 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
         timezone: formData.timezone
       });
 
+      // Validate the new token
+      const validation = await api.get(`/licenses/validate-token?token=${encodeURIComponent(tokenResponse.data.token)}`);
+
       setFormData(prev => ({
         ...prev,
         license_key: tokenResponse.data.token
       }));
+
+      setTokenDetails({
+        valid: validation.data.valid,
+        issued_at: validation.data.data?.issued_at,
+        expires_at: validation.data.data?.expires_at
+      });
     } catch (err) {
       setErrors({
         general: err.response?.data?.message || 'Failed to regenerate token. Please check dates and try again.'
@@ -169,6 +194,7 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
       // Update lab details
       const labPayload = {
         lab_name: formData.lab_name,
+        app_url: formData.app_url,
         contact_person: formData.contact_person,
         contact_email: formData.contact_email,
         contact_phone: formData.contact_phone,
@@ -234,11 +260,20 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
                     onChange={handleChange}
                     required
                   />
-                  {errors.lab_name && (
-                    <div className="invalid-feedback">{errors.lab_name}</div>
-                  )}
                 </div>
                 
+                <div className="form-group">
+                  <label>App URL</label>
+                  <input
+                    type="text"
+                    name="app_url"
+                    className={`form-control ${errors.app_url ? 'is-invalid' : ''}`}
+                    value={formData.app_url}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
                 <div className="form-group">
                   <label>Contact Person *</label>
                   <input
@@ -249,9 +284,6 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
                     onChange={handleChange}
                     required
                   />
-                  {errors.contact_person && (
-                    <div className="invalid-feedback">{errors.contact_person}</div>
-                  )}
                 </div>
                 
                 <div className="form-group">
@@ -264,9 +296,6 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
                     onChange={handleChange}
                     required
                   />
-                  {errors.contact_email && (
-                    <div className="invalid-feedback">{errors.contact_email}</div>
-                  )}
                 </div>
               </div>
               
@@ -281,9 +310,6 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
                     onChange={handleChange}
                     required
                   />
-                  {errors.contact_phone && (
-                    <div className="invalid-feedback">{errors.contact_phone}</div>
-                  )}
                 </div>
                 
                 <div className="form-group">
@@ -296,9 +322,6 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
                     required
                     rows={3}
                   />
-                  {errors.address && (
-                    <div className="invalid-feedback">{errors.address}</div>
-                  )}
                 </div>
               </div>
             </div>
@@ -306,9 +329,10 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
             {showTokenSection && (
               <div className="border p-3 mb-3 mt-3">
                 <h5>License Information</h5>
-                <div className="alert alert-info">
-                  <strong>Timezone:</strong> {formData.timezone}
-                </div>
+                {/* <div className="alert alert-info">
+                  <i className="fas fa-lock mr-2"></i>
+                  License tokens are securely encrypted and cannot be decoded without server access
+                </div> */}
                 <div className="row">
                   <div className="col-md-6">
                     <div className="form-group">
@@ -323,9 +347,6 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
                         pattern="\d{2}-\d{2}-\d{4}"
                         required
                       />
-                      {errors.issued_date && (
-                        <div className="invalid-feedback">{errors.issued_date}</div>
-                      )}
                     </div>
                     <div className="form-group">
                       <label>Issued Time *</label>
@@ -352,9 +373,6 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
                         pattern="\d{2}-\d{2}-\d{4}"
                         required
                       />
-                      {errors.expiry_date && (
-                        <div className="invalid-feedback">{errors.expiry_date}</div>
-                      )}
                     </div>
                     <div className="form-group">
                       <label>Expiry Time *</label>
@@ -393,11 +411,21 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
                       </button>
                     </div>
                   </div>
-                  {errors.license_key && (
-                    <div className="invalid-feedback">{errors.license_key}</div>
-                  )}
+                  {/* {tokenDetails && (
+                    <div className={`alert ${tokenDetails.valid ? 'alert-success' : 'alert-danger'} mt-2`}>
+                      <div>
+                        <strong>Token Status:</strong> {tokenDetails.valid ? 'Valid' : 'Invalid'}
+                      </div>
+                      <div>
+                        <strong>Issued At:</strong> {tokenDetails.issued_at}
+                      </div>
+                      <div>
+                        <strong>Expires At:</strong> {tokenDetails.expires_at}
+                      </div>
+                    </div>
+                  )} */}
                   <small className="form-text text-muted">
-                    Token valid from {formData.issued_date} {formData.issued_time} to {formData.expiry_date} {formData.expiry_time} ({formData.timezone})
+                    Times are in {formData.timezone}. Token will be valid from {formData.issued_date} {formData.issued_time} to {formData.expiry_date} {formData.expiry_time}
                   </small>
                 </div>
               </div>
@@ -419,7 +447,7 @@ const EditLab = ({ lab, onCancel, onSubmit }) => {
               >
                 {isSubmitting ? (
                   <>
-                    <span className="spinner-border spinner-border-sm mr-2" role="status" aria-hidden="true"></span>
+                    <span className="spinner-border spinner-border-sm mr-2" role="status"></span>
                     Saving...
                   </>
                 ) : (

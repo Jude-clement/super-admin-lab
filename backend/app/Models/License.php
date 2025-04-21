@@ -25,7 +25,7 @@ class License extends Model
         'issued_date',
         'expiry_date',
         'status',
-        'features'
+        'features',
     ];
 
     protected $casts = [

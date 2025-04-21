@@ -31,7 +31,9 @@ class LabController extends Controller
             'license_status' => 'sometimes|string|in:active,inactive', // Removed 'expired'
             'license_key' => 'sometimes|nullable|string|unique:licenses,license_key',
             'issued_date' => 'sometimes|nullable|date',
-            'expiry_date' => 'sometimes|nullable|date|after:issued_date'
+            'app_url' => 'sometimes|nullable|url',
+            'expiry_date' => 'sometimes|nullable|date|after:issued_date',
+            
         ]);
     
         // Create the lab
@@ -41,7 +43,9 @@ class LabController extends Controller
             'contact_email' => $validated['contact_email'],
             'contact_phone' => $validated['contact_phone'],
             'address' => $validated['address'],
+            'app_url' => $validated['app_url'] ?? null,
             'license_status' => $validated['license_status'] ?? 'active'
+            
         ]);
     
         // Create license if included
@@ -89,6 +93,7 @@ $lab->update(['license_status' => $license->status === License::ACTIVE ? 'active
             'contact_email' => 'sometimes|email',
             'contact_phone' => 'sometimes|string',
             'address' => 'sometimes|string',
+            'app_url' => 'sometimes|nullable|url',
             'license_status' => 'sometimes|string|in:active,inactive' // Removed 'expired'
         ]);
 

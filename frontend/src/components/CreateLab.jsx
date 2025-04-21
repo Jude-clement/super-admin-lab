@@ -3,12 +3,6 @@ import api from '../api';
 import { format, parse } from 'date-fns';
 
 const CreateLab = ({ onCancel, onSubmit }) => {
-  // Status constants
-  const LICENSE_STATUS = {
-    DEACTIVATED: 0,
-    ACTIVE: 1
-  };
-
   const [formData, setFormData] = useState({
     // Lab Info
     lab_name: '',
@@ -16,7 +10,7 @@ const CreateLab = ({ onCancel, onSubmit }) => {
     contact_email: '',
     contact_phone: '',
     address: '',
-    // license_status: 'active', // Maintain string status for lab
+    app_url: '',
     includeLicense: true,
     
     // License Info
@@ -30,7 +24,8 @@ const CreateLab = ({ onCancel, onSubmit }) => {
   
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [step, setStep] = useState(1); // 1: Lab info, 2: License info
+  const [step, setStep] = useState(1);
+  const [tokenDetails, setTokenDetails] = useState(null);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -41,27 +36,56 @@ const CreateLab = ({ onCancel, onSubmit }) => {
     setFormData(prev => ({ ...prev, includeLicense: e.target.checked }));
   };
 
-  const handleNext = async () => {
-    // Validate lab info only
+  const validateLabInfo = () => {
     const labErrors = {};
     if (!formData.lab_name) labErrors.lab_name = 'Lab name is required';
     if (!formData.contact_person) labErrors.contact_person = 'Contact person is required';
-    if (!formData.contact_email) labErrors.contact_email = 'Contact email is required';
+    if (!formData.contact_email) {
+      labErrors.contact_email = 'Contact email is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.contact_email)) {
+      labErrors.contact_email = 'Invalid email format';
+    }
     if (!formData.contact_phone) labErrors.contact_phone = 'Contact phone is required';
     if (!formData.address) labErrors.address = 'Address is required';
+    if (!formData.app_url) labErrors.app_url = 'App URL is required';
 
     if (Object.keys(labErrors).length > 0) {
       setErrors(labErrors);
-      return;
+      return false;
+    }
+    return true;
+  };
+
+  const validateLicenseInfo = () => {
+    if (!formData.includeLicense) return true;
+
+    const licenseErrors = {};
+    const issuedAt = new Date(`${formData.issued_date}T${formData.issued_time}`);
+    const expiresAt = new Date(`${formData.expiry_date}T${formData.expiry_time}`);
+
+    if (expiresAt <= issuedAt) {
+      licenseErrors.expiry_date = 'Expiry must be after issue date/time';
     }
 
+    if (Object.keys(licenseErrors).length > 0) {
+      setErrors(licenseErrors);
+      return false;
+    }
+    return true;
+  };
+
+  const handleNext = () => {
+    if (!validateLabInfo()) return;
     setErrors({});
     setStep(2);
   };
 
   const handleGenerateToken = async () => {
+    if (!validateLicenseInfo()) return;
+    
     try {
       setIsSubmitting(true);
+      setErrors({});
       
       // First create the lab
       const labResponse = await api.post('/labs', {
@@ -70,12 +94,13 @@ const CreateLab = ({ onCancel, onSubmit }) => {
         contact_email: formData.contact_email,
         contact_phone: formData.contact_phone,
         address: formData.address,
-        license_status: formData.license_status
+        app_url: formData.app_url,
+        license_status: 'inactive' // Start inactive until license is created
       });
 
       const labId = labResponse.data.data.lab_id;
       
-      // Now generate token with the lab ID
+      // Generate encrypted token with the lab ID
       const issuedAt = `${formData.issued_date} ${formData.issued_time}:00`;
       const expiresAt = `${formData.expiry_date} ${formData.expiry_time}:00`;
       
@@ -85,15 +110,24 @@ const CreateLab = ({ onCancel, onSubmit }) => {
         expires_at: expiresAt
       });
 
+      // Verify the token was generated properly using GET method
+      const validation = await api.get(`/licenses/validate-token?token=${encodeURIComponent(tokenResponse.data.token)}`);
+
       setFormData(prev => ({
         ...prev,
         license_token: tokenResponse.data.token,
         created_lab_id: labId
       }));
 
+      setTokenDetails({
+        issuedAt: validation.data.data?.issued_at,
+        expiresAt: validation.data.data?.expires_at,
+        valid: validation.data.valid
+      });
+
     } catch (err) {
       setErrors({
-        general: err.response?.data?.message || 'Failed to create lab and generate token'
+        general: err.response?.data?.message || 'Failed to generate secure license token'
       });
     } finally {
       setIsSubmitting(false);
@@ -102,38 +136,38 @@ const CreateLab = ({ onCancel, onSubmit }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!validateLicenseInfo()) return;
+    
     setIsSubmitting(true);
+    setErrors({});
     
     try {
       // Create license if needed
       if (formData.includeLicense && formData.license_token) {
-        // Format dates consistently
         const issuedDateTime = parse(
           `${formData.issued_date} ${formData.issued_time}`,
           'yyyy-MM-dd HH:mm',
           new Date()
-        ).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+        );
         
         const expiryDateTime = parse(
           `${formData.expiry_date} ${formData.expiry_time}`,
           'yyyy-MM-dd HH:mm',
           new Date()
-        ).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
-  
+        );
+
         await api.post('/licenses', {
           client_id: formData.created_lab_id,
           license_key: formData.license_token,
           issued_date: format(issuedDateTime, 'yyyy-MM-dd HH:mm:ss'),
           expiry_date: format(expiryDateTime, 'yyyy-MM-dd HH:mm:ss')
-          // Let backend calculate status
         });
       }
     
       onSubmit({ lab_id: formData.created_lab_id });
-    }
-    catch (err) {
+    } catch (err) {
       setErrors({
-        general: err.response?.data?.message || 'Failed to create license'
+        general: err.response?.data?.message || 'Failed to complete registration'
       });
     } finally {
       setIsSubmitting(false);
@@ -145,7 +179,7 @@ const CreateLab = ({ onCancel, onSubmit }) => {
       <div className="card">
         <div className="card-header">
           <h2 className="mb-0">
-            {step === 1 ? 'Create New Lab' : 'Add License Information'}
+            {step === 1 ? 'Lab Information' : 'License Information'}
           </h2>
         </div>
         <div className="card-body">
@@ -158,7 +192,6 @@ const CreateLab = ({ onCancel, onSubmit }) => {
               // Step 1: Lab Information
               <div className="row">
                 <div className="col-md-6">
-                  <h5>Lab Information</h5>
                   <div className="form-group">
                     <label>Lab Name *</label>
                     <input
@@ -173,6 +206,21 @@ const CreateLab = ({ onCancel, onSubmit }) => {
                       <div className="invalid-feedback">{errors.lab_name}</div>
                     )}
                   </div>
+
+                  <div className='form-group'>
+                    <label>App URL</label>
+                    <input
+                      type="text"
+                      name="app_url"  
+                      className={`form-control ${errors.app_url ? 'is-invalid' : ''}`}
+                      value={formData.app_url}
+                      onChange={handleChange}
+                      required
+                    />
+                    {errors.app_url && (
+                      <div className="invalid-feedback">{errors.app_url}</div>
+                    )}
+                    </div>
                   
                   <div className="form-group">
                     <label>Contact Person *</label>
@@ -188,7 +236,9 @@ const CreateLab = ({ onCancel, onSubmit }) => {
                       <div className="invalid-feedback">{errors.contact_person}</div>
                     )}
                   </div>
-                  
+                </div>
+                
+                <div className="col-md-6">
                   <div className="form-group">
                     <label>Contact Email *</label>
                     <input
@@ -203,9 +253,7 @@ const CreateLab = ({ onCancel, onSubmit }) => {
                       <div className="invalid-feedback">{errors.contact_email}</div>
                     )}
                   </div>
-                </div>
-                
-                <div className="col-md-6">
+                  
                   <div className="form-group">
                     <label>Contact Phone *</label>
                     <input
@@ -220,7 +268,9 @@ const CreateLab = ({ onCancel, onSubmit }) => {
                       <div className="invalid-feedback">{errors.contact_phone}</div>
                     )}
                   </div>
-                  
+                </div>
+
+                <div className="col-12">
                   <div className="form-group">
                     <label>Address *</label>
                     <textarea
@@ -235,26 +285,7 @@ const CreateLab = ({ onCancel, onSubmit }) => {
                       <div className="invalid-feedback">{errors.address}</div>
                     )}
                   </div>
-                  
-                  {/* <div className="form-group">
-                    <label>License Status *</label>
-                    <select
-                      name="license_status"
-                      className={`form-control ${errors.license_status ? 'is-invalid' : ''}`}
-                      value={formData.license_status}
-                      onChange={handleChange}
-                      required
-                    >
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                    </select>
-                    {errors.license_status && (
-                      <div className="invalid-feedback">{errors.license_status}</div>
-                    )}
-                  </div> */}
-                </div>
 
-                <div className="col-12">
                   <div className="form-check mb-3">
                     <input
                       type="checkbox"
@@ -271,8 +302,13 @@ const CreateLab = ({ onCancel, onSubmit }) => {
               </div>
             ) : (
               // Step 2: License Information
-              <div className="border p-3 mb-3">
-                <h5>License Information</h5>
+              <div className="p-3 mb-3">
+                {/* <h5>License Information</h5> */}
+                {/* <div className="alert alert-info">
+                  <i className="fas fa-lock mr-2"></i>
+                  License tokens are securely encrypted and cannot be decoded without server access
+                </div> */}
+
                 <div className="row">
                   <div className="col-md-6">
                     <div className="form-group">
@@ -285,9 +321,6 @@ const CreateLab = ({ onCancel, onSubmit }) => {
                         onChange={handleChange}
                         required
                       />
-                      {errors.issued_date && (
-                        <div className="invalid-feedback">{errors.issued_date}</div>
-                      )}
                     </div>
                     <div className="form-group">
                       <label>Issued Time *</label>
@@ -355,15 +388,22 @@ const CreateLab = ({ onCancel, onSubmit }) => {
                         </button>
                       </div>
                     </div>
-                    {errors.license_token && (
-                      <div className="invalid-feedback">{errors.license_token}</div>
+                    {/* {tokenDetails && formData.license_token && (
+                      <div className="alert alert-success mt-2">
+                        <div>
+                          <strong>Token Valid:</strong> {tokenDetails.valid ? 'Yes' : 'No'}
+                        </div>
+                        <div>
+                          <strong>Issued At:</strong> {tokenDetails.issuedAt}
+                        </div>
+                        <div>
+                          <strong>Expires At:</strong> {tokenDetails.expiresAt}
+                        </div>
+                      </div>
                     )}
-                    {/* <small className="form-text text-muted">
-                      Token will be valid from {formData.issued_date} {formData.issued_time} to {formData.expiry_date} {formData.expiry_time}
-                    </small> */}
                     <small className="form-text text-muted">
-  Times are in IST (Asia/Kolkata). Valid from {formData.issued_date} {formData.issued_time} to {formData.expiry_date} {formData.expiry_time}
-</small>
+                      Times are in IST (Asia/Kolkata). Token will be valid from {formData.issued_date} {formData.issued_time} to {formData.expiry_date} {formData.expiry_time}
+                    </small> */}
                   </div>
                 )}
               </div>
@@ -402,7 +442,14 @@ const CreateLab = ({ onCancel, onSubmit }) => {
                     className="btn btn-primary"
                     disabled={isSubmitting || (formData.includeLicense && !formData.license_token)}
                   >
-                    {isSubmitting ? 'Creating...' : 'Complete Registration'}
+                    {isSubmitting ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm mr-2" role="status"></span>
+                        Processing...
+                      </>
+                    ) : (
+                      'Complete Registration'
+                    )}
                   </button>
                 </>
               )}
